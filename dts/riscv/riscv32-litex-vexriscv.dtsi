@@ -35,14 +35,14 @@
 			reg-names = "irq_mask", "irq_pending";
 			riscv,max-priority = <7>;
 		};
-		uart0: serial@e0001800 {
+		uart0: serial@0x82001800 {
 			compatible = "litex,uart0";
 			interrupt-parent = <&intc0>;
 			interrupts = <2 10>;
-			reg = <0xe0001800 0x18>;
+			reg = <0x82001800 0x18>;
 			reg-names = "control";
 			label = "uart0";
-			status = "disabled";
+			status = "okay";
 		};
 		spi0: spi@e0002000 {
 			compatible = "litex,spi";
