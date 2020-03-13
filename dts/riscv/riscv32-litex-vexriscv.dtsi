@@ -55,7 +55,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
-		timer0: serial@0x82002000 {
+		timer0: serial@82002000 {
 			compatible = "litex,timer0";
 			interrupt-parent = <&intc0>;
 			interrupts = <1 0>;
@@ -134,16 +134,20 @@
         i2s_in: i2s_in@82005000 {
           compatible = "litex,i2s";
           reg = <0x82005000 0x20>;
+          #address-cells = <1>;
+	      #size-cells = <0>;
           reg-names = "control";
           label = "i2s_rx";
-          status = "okay";
+          status = "disabled";
         };
         i2s_out: i2s_out@82005800 {
           compatible = "litex,i2s";
           reg = <0x82005800 0x20>;
+          #address-cells = <1>;
+	      #size-cells = <0>;
           reg-names = "control";
           label = "i2s_tx";
-          status = "okay";
+          status = "disabled";
         };
 	};
 };

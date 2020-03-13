@@ -65,3 +65,6 @@
 &gpio_in {
 	status = "okay";
 };
+&i2s_in {
+    status = "okay";
+};

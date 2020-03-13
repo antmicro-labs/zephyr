@@ -7,7 +7,6 @@
 description: LiteX I2S controller
 
 compatible: "litex,i2s"
-on-bus: i2s
 include: i2s-controller.yaml
 
 properties:
