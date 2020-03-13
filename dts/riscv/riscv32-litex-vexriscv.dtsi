@@ -35,7 +35,7 @@
 			reg-names = "irq_mask", "irq_pending";
 			riscv,max-priority = <7>;
 		};
-		uart0: serial@0x82001800 {
+		uart0: serial@82001800 {
 			compatible = "litex,uart0";
 			interrupt-parent = <&intc0>;
 			interrupts = <2 10>;
@@ -55,24 +55,24 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
-		timer0: serial@e0002800 {
+		timer0: serial@0x82002000 {
 			compatible = "litex,timer0";
 			interrupt-parent = <&intc0>;
 			interrupts = <1 0>;
-			reg = <0xe0002800 0x40>;
+			reg = <0x82002000 0x44>;
 			reg-names = "control";
 			label = "timer0";
-			status = "disabled";
+			status = "okay";
 		};
-		eth0: ethernet@e0009800 {
+		eth0: ethernet@82003000{
 			compatible = "litex,eth0";
 			interrupt-parent = <&intc0>;
 			interrupts = <3 0>;
-			reg = <0xe0009800 0x6b 0xb0000000 0x2000>;
+			reg = <0x82003000 0xb 0x82003800 0x6b >;
 			local-mac-address = [10 e2 d5 00 00 02];
 			reg-names = "control", "buffers";
 			label = "eth0";
-			status = "disabled";
+			status = "okay";
 		};
 		dna0: dna@e0003800 {
 			compatible = "litex,dna0";
@@ -131,5 +131,19 @@
 			status = "disabled";
 			#pwm-cells = <2>;
 		};
+        i2s_rx0: i2s_rx@82005000 {
+          compatible = "litex,i2s_rx";
+          reg = <0x82005000 0x20>;
+          reg-names = "control";
+          label = "i2s_rx0";
+          status = "okay";
+        };
+        i2s_tx0: i2s_tx@82005800 {
+          compatible = "litex,i2s_tx";
+          reg = <0x82005800 0x20>;
+          reg-names = "control";
+          label = "i2s_tx0";
+          status = "okay";
+        };
 	};
 };
