@@ -131,18 +131,18 @@
 			status = "disabled";
 			#pwm-cells = <2>;
 		};
-        i2s_rx0: i2s_rx@82005000 {
-          compatible = "litex,i2s_rx";
+        i2s_in: i2s_in@82005000 {
+          compatible = "litex,i2s";
           reg = <0x82005000 0x20>;
           reg-names = "control";
-          label = "i2s_rx0";
+          label = "i2s_rx";
           status = "okay";
         };
-        i2s_tx0: i2s_tx@82005800 {
-          compatible = "litex,i2s_tx";
+        i2s_out: i2s_out@82005800 {
+          compatible = "litex,i2s";
           reg = <0x82005800 0x20>;
           reg-names = "control";
-          label = "i2s_tx0";
+          label = "i2s_tx";
           status = "okay";
         };
 	};
