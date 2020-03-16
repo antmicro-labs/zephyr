@@ -1,0 +1,11 @@
+# 
+# Copyright (c) 2020 Antmicro <www.antmicro.com>
+# 
+# SPDX-License-Identifier: Apache-2.0
+#
+
+menuconfig I2S_LITEX
+	bool "Litex I2S driver"
+	depends on SOC_RISCV32_LITEX_VEXRISCV
+	help
+	  Enable Litex Inter Sound (I2S) bus driver. 
