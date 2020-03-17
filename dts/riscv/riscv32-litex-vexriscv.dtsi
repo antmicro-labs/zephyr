@@ -135,8 +135,9 @@
           compatible = "litex,i2s";
           reg = <0x82005000 0x20 0xC0000000 0x40000>;
           #address-cells = <1>;
-	  #size-cells = <0>;
+    	  #size-cells = <0>;
           reg-names = "control","fifo";
+          fifo_depth = <256>;
           label = "i2s_rx";
           status = "disabled";
         };
@@ -144,8 +145,9 @@
           compatible = "litex,i2s";
           reg = <0x82005800 0x20 0xD0000000 0x40000>;
           #address-cells = <1>;
-	  #size-cells = <0>;
+    	  #size-cells = <0>;
           reg-names = "control","fifo";
+          fifo_depth = <256>;
           label = "i2s_tx";
           status = "disabled";
         };

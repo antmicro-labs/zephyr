@@ -12,3 +12,7 @@ include: i2s-controller.yaml
 properties:
     reg:
       required: true
+
+    fifo_depth:
+        type: int
+        required: true
