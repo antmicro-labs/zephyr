@@ -133,19 +133,19 @@
 		};
         i2s_in: i2s_in@82005000 {
           compatible = "litex,i2s";
-          reg = <0x82005000 0x20>;
+          reg = <0x82005000 0x20 0xC0000000 0x40000>;
           #address-cells = <1>;
 	  #size-cells = <0>;
-          reg-names = "control";
+          reg-names = "control","fifo";
           label = "i2s_rx";
           status = "disabled";
         };
         i2s_out: i2s_out@82005800 {
           compatible = "litex,i2s";
-          reg = <0x82005800 0x20>;
+          reg = <0x82005800 0x20 0xD0000000 0x40000>;
           #address-cells = <1>;
 	  #size-cells = <0>;
-          reg-names = "control";
+          reg-names = "control","fifo";
           label = "i2s_tx";
           status = "disabled";
         };
