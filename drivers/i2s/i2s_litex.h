@@ -67,9 +67,30 @@
 // define fifo address for i2s_tx
 #define I2S_TX_FIFO_ADDR DT_INST_1_LITEX_I2S_BASE_ADDRESS_1
 //define fifo depth
-#define I2S_RX_FIFO_DEPTH (DT_INST_1_LITEX_I2S_FIFO_DEPTH / 32) //bytes
+#define I2S_TX_FIFO_DEPTH (DT_INST_1_LITEX_I2S_FIFO_DEPTH / 32) //bytes
 
 #define I2S_FIFO_CHUNK_SIZE 4 // bytes
 #define I2S_SINGLE_CHANNEL_SIZE 2 // bytes
 #define I2S_MAX_FIFO_DEPTH_SIZE (512 /32) 
+
+struct stream {
+	s32_t state;
+	struct k_sem sem;
+	struct i2s_config cfg;
+};
+
+/* Device run time data */
+struct i2s_litex_data {
+	struct stream rx;
+	struct stream tx;
+};
+
+/* Device const configuration */
+struct i2s_litex_cfg
+{
+   u32_t base;
+   u32_t fifo_base;
+   u16_t fifo_depth;
+};
+
 #endif /* _I2S_LITEI2S__H */
