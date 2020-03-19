@@ -13,13 +13,13 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(i2s_litex);
 #define DEV_CFG(dev) \
-	((struct mpxxdtyy_config *const)(dev)->config->config_info)
+	((struct i2s_litex_cfg *const)(dev)->config->config_info)
 #define DEV_DATA(dev) \
-	((struct mpxxdtyy_data *const)(dev)->driver_data)
+	((struct i2s_litex_data*const)(dev)->driver_data)
 
 static int i2s_litex_initialize(struct device *dev)
 {
-	struct i2s_litex_data *const dev_data =(struct i2s_litex_data*const)dev->driver_data;
+	struct i2s_litex_data *const dev_data =DEV_DATA(dev);
 
 	k_sem_init(&dev_data->rx.sem, 0, 1);
 	k_sem_init(&dev_data->tx.sem, 0, 1);
@@ -32,97 +32,67 @@ static int i2s_litex_initialize(struct device *dev)
 static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 			       struct i2s_config *i2s_cfg)
 {
-//	const struct i2s_litex_cfg *const cfg = DEV_CFG(dev);
-//	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
-//	struct stream *stream;
-//	u32_t bit_clk_freq;
-//	int ret;
-//
-//	if (dir == I2S_DIR_RX) {
-//		stream = &dev_data->rx;
-//	} else if (dir == I2S_DIR_TX) {
-//		stream = &dev_data->tx;
-//	} else {
-//		LOG_ERR("Either RX or TX direction must be selected");
-//		return -EINVAL;
-//	}
-//
-//	if (stream->state != I2S_STATE_NOT_READY &&
-//	    stream->state != I2S_STATE_READY) {
-//		LOG_ERR("invalid state");
-//		return -EINVAL;
-//	}
-//
-//	stream->master = true;
-//	if (i2s_cfg->options & I2S_OPT_FRAME_CLK_SLAVE ||
-//	    i2s_cfg->options & I2S_OPT_BIT_CLK_SLAVE) {
-//		stream->master = false;
-//	}
-//
-//	if (i2s_cfg->frame_clk_freq == 0U) {
-//		stream->queue_drop(stream);
-//		memset(&stream->cfg, 0, sizeof(struct i2s_config));
-//		stream->state = I2S_STATE_NOT_READY;
-//		return 0;
-//	}
-//
-//	memcpy(&stream->cfg, i2s_cfg, sizeof(struct i2s_config));
-//
-//	/* set I2S bitclock */
-//	bit_clk_freq = i2s_cfg->frame_clk_freq *
-//		       i2s_cfg->word_size * i2s_cfg->channels;
-//
-//	ret = i2s_litex_set_clock(dev, bit_clk_freq);
-//	if (ret < 0) {
-//		return ret;
-//	}
-//
-//	/* set I2S Data Format */
-//	if (i2s_cfg->word_size == 16U) {
-//		LL_I2S_SetDataFormat(cfg->i2s, LL_I2S_DATAFORMAT_16B);
-//	} else if (i2s_cfg->word_size == 24U) {
-//		LL_I2S_SetDataFormat(cfg->i2s, LL_I2S_DATAFORMAT_24B);
-//	} else if (i2s_cfg->word_size == 32U) {
-//		LL_I2S_SetDataFormat(cfg->i2s, LL_I2S_DATAFORMAT_32B);
-//	} else {
-//		LOG_ERR("invalid word size");
-//		return -EINVAL;
-//	}
-//
-//	/* set I2S Standard */
-//	switch (i2s_cfg->format & I2S_FMT_DATA_FORMAT_MASK) {
-//	case I2S_FMT_DATA_FORMAT_I2S:
-//		LL_I2S_SetStandard(cfg->i2s, LL_I2S_STANDARD_PHILIPS);
-//		break;
-//
-//	case I2S_FMT_DATA_FORMAT_PCM_SHORT:
-//		LL_I2S_SetStandard(cfg->i2s, LL_I2S_STANDARD_PCM_SHORT);
-//		break;
-//
-//	case I2S_FMT_DATA_FORMAT_PCM_LONG:
-//		LL_I2S_SetStandard(cfg->i2s, LL_I2S_STANDARD_PCM_LONG);
-//		break;
-//
-//	case I2S_FMT_DATA_FORMAT_LEFT_JUSTIFIED:
-//		LL_I2S_SetStandard(cfg->i2s, LL_I2S_STANDARD_MSB);
-//		break;
-//
-//	case I2S_FMT_DATA_FORMAT_RIGHT_JUSTIFIED:
-//		LL_I2S_SetStandard(cfg->i2s, LL_I2S_STANDARD_LSB);
-//		break;
-//
-//	default:
-//		LOG_ERR("Unsupported I2S data format");
-//		return -EINVAL;
-//	}
-//
-//	/* set I2S clock polarity */
-//	if ((i2s_cfg->format & I2S_FMT_CLK_FORMAT_MASK) == I2S_FMT_BIT_CLK_INV)
-//		LL_I2S_SetClockPolarity(cfg->i2s, LL_I2S_POLARITY_HIGH);
-//	else
-//		LL_I2S_SetClockPolarity(cfg->i2s, LL_I2S_POLARITY_LOW);
-//
-//	stream->state = I2S_STATE_READY;
+
+	LOG_INF(" Device conigure function invoked");
+	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
+    struct stream *stream;
+
+	if (dir == I2S_DIR_RX) {
+		stream = &dev_data->rx;
+	} else if (dir == I2S_DIR_TX) {
+		stream = &dev_data->tx;
+	} else {
+		LOG_ERR("Either RX or TX direction must be selected");
+		return -EINVAL;
+	}
+
+	if (stream->state != I2S_STATE_NOT_READY &&
+	    stream->state != I2S_STATE_READY) {
+		LOG_ERR("invalid state");
+		return -EINVAL;
+	}
+    
+	if (i2s_cfg->options & I2S_OPT_FRAME_CLK_MASTER ||
+	    i2s_cfg->options & I2S_OPT_BIT_CLK_MASTER ||
+        i2s_cfg->options & I2S_OPT_BIT_CLK_GATED) {
+		LOG_ERR("invalid operating mode.");
+		return -EINVAL;
+	}
+
+    if(i2s_cfg->channels != 2)
+    {
+        LOG_ERR("invalid channel width");
+        return -EINVAL;
+    }
+
+	if (i2s_cfg->frame_clk_freq == 0U) {
+		memset(&stream->cfg, 0, sizeof(struct i2s_config));
+		stream->state = I2S_STATE_NOT_READY;
+		return 0;
+	}
+
+	/* set I2S Data Format */
+	if (i2s_cfg->word_size != 32U) {
+		LOG_ERR("invalid word size.");
+		return -EINVAL;
+    }
+
+	/* set I2S Standard */
+	if((i2s_cfg->format & I2S_FMT_DATA_FORMAT_MASK) 
+            != I2S_FMT_DATA_FORMAT_LEFT_JUSTIFIED) {
+		LOG_ERR("unsupported I2S data format");
+		return -EINVAL;
+	}
+
+    if(i2s_cfg->timeout != K_FOREVER)
+    {
+        LOG_ERR("driver supports only polling mode");
+        return -EINVAL;
+    }
+
+	memcpy(&stream->cfg, i2s_cfg, sizeof(struct i2s_config));
+	stream->state = I2S_STATE_READY;
+    LOG_INF("I2S CONFIGURATION DONE");
 	return 0;
 }
 
