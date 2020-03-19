@@ -33,7 +33,7 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 			       struct i2s_config *i2s_cfg)
 {
 
-	LOG_INF(" Device conigure function invoked");
+	LOG_INF("i2s conigure function invoked");
 	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
     struct stream *stream;
 
@@ -147,55 +147,49 @@ static int i2s_litex_write(struct device *dev, void *mem_block, size_t size)
 static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 			     enum i2s_trigger_cmd cmd)
 {
-//	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
-//	struct stream *stream;
-//	unsigned int key;
-//	int ret;
-//
-//	if (dir == I2S_DIR_RX) {
-//		stream = &dev_data->rx;
-//	} else if (dir == I2S_DIR_TX) {
-//		stream = &dev_data->tx;
-//	} else {
-//		LOG_ERR("Either RX or TX direction must be selected");
-//		return -EINVAL;
-//	}
-//
-//	switch (cmd) {
-//	case I2S_TRIGGER_START:
-//		if (stream->state != I2S_STATE_READY) {
-//			LOG_ERR("START trigger: invalid state %d",
-//				    stream->state);
-//			return -EIO;
-//		}
-//
-//		__ASSERT_NO_MSG(stream->mem_block == NULL);
-//
-//		ret = stream->stream_start(stream, dev);
-//		if (ret < 0) {
-//			LOG_ERR("START trigger failed %d", ret);
-//			return ret;
-//		}
-//
-//		stream->state = I2S_STATE_RUNNING;
-//		stream->last_block = false;
-//		break;
-//
-//	case I2S_TRIGGER_STOP:
-//		key = irq_lock();
-//		if (stream->state != I2S_STATE_RUNNING) {
-//			irq_unlock(key);
-//			LOG_ERR("STOP trigger: invalid state");
-//			return -EIO;
-//		}
-//		irq_unlock(key);
-//		stream->stream_disable(stream, dev);
-//		stream->queue_drop(stream);
-//		stream->state = I2S_STATE_READY;
-//		stream->last_block = true;
-//		break;
-//
-//	case I2S_TRIGGER_DRAIN:
+	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
+	const struct i2s_litex_cfg *const cfg = DEV_CFG(dev);
+	struct stream *stream;
+
+	if (dir == I2S_DIR_RX) {
+		stream = &dev_data->rx;
+	} else if (dir == I2S_DIR_TX) {
+		stream = &dev_data->tx;
+	} else {
+		LOG_ERR("Either RX or TX direction must be selected");
+		return -EINVAL;
+	}
+
+	switch (cmd) {
+	case I2S_TRIGGER_START:
+		if (stream->state != I2S_STATE_READY) {
+			LOG_ERR("START trigger: invalid state %d",
+				    stream->state);
+			return -EIO;
+		}
+
+        LOG_INF("Enabling i2s under %x", cfg->base + I2S_CONTROL_REG_OFFSET);
+        litex_write8(I2S_ENABLE | I2S_FIFO_RESET,
+                    cfg->base + I2S_CONTROL_REG_OFFSET);
+        LOG_INF("Reading i2s %x value should be %x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET),I2S_ENABLE | I2S_FIFO_RESET);
+		__ASSERT_NO_MSG(stream->mem_block == NULL);
+
+		stream->state = I2S_STATE_RUNNING;
+		break;
+	case I2S_TRIGGER_STOP:
+		if (stream->state != I2S_STATE_RUNNING) {
+			LOG_ERR("STOP trigger: invalid state");
+			return -EIO;
+		}
+        LOG_INF("Disabling i2s under %x", cfg->base + I2S_CONTROL_REG_OFFSET);
+        litex_write8(I2S_DISABLE | I2S_FIFO_RESET,
+                    cfg->base + I2S_CONTROL_REG_OFFSET);
+        LOG_INF("Reading i2s %x value should be %x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET),I2S_DISABLE | I2S_FIFO_RESET);
+//      stream->queue_drop(stream);
+		stream->state = I2S_STATE_READY;
+		break;
+
+	case I2S_TRIGGER_DRAIN:
 //		key = irq_lock();
 //		if (stream->state != I2S_STATE_RUNNING) {
 //			irq_unlock(key);
@@ -208,7 +202,7 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 //		irq_unlock(key);
 //		break;
 //
-//	case I2S_TRIGGER_DROP:
+    case I2S_TRIGGER_DROP:
 //		if (stream->state == I2S_STATE_NOT_READY) {
 //			LOG_ERR("DROP trigger: invalid state");
 //			return -EIO;
@@ -218,7 +212,7 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 //		stream->state = I2S_STATE_READY;
 //		break;
 //
-//	case I2S_TRIGGER_PREPARE:
+	case I2S_TRIGGER_PREPARE:
 //		if (stream->state != I2S_STATE_ERROR) {
 //			LOG_ERR("PREPARE trigger: invalid state");
 //			return -EIO;
@@ -227,11 +221,11 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 //		stream->queue_drop(stream);
 //		break;
 //
-//	default:
-//		LOG_ERR("Unsupported trigger command");
-//		return -EINVAL;
-//	}
-//
+	default:
+		LOG_ERR("Unsupported trigger command");
+		return -EINVAL;
+	}
+
 	return 0;
 }
 static const struct i2s_driver_api i2s_litex_driver_api = {
@@ -256,7 +250,6 @@ static const struct i2s_driver_api i2s_litex_driver_api = {
 			POST_KERNEL, \
 			CONFIG_I2S_INIT_PRIORITY, \
 			&i2s_litex_driver_api)
-
 
 
 I2S_INIT(0);
