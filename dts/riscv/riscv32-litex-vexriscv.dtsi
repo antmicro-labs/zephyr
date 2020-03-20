@@ -38,7 +38,7 @@
 		uart0: serial@82001800 {
 			compatible = "litex,uart0";
 			interrupt-parent = <&intc0>;
-			interrupts = <2 10>;
+			interrupts = <0 10>;
 			reg = <0x82001800 0x18>;
 			reg-names = "control";
 			label = "uart0";
@@ -55,7 +55,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
-		timer0: serial@82002000 {
+		timer0: timer@82002000 {
 			compatible = "litex,timer0";
 			interrupt-parent = <&intc0>;
 			interrupts = <1 0>;
@@ -67,7 +67,7 @@
 		eth0: ethernet@82003000{
 			compatible = "litex,eth0";
 			interrupt-parent = <&intc0>;
-			interrupts = <3 0>;
+			interrupts = <2 0>;
 			reg = <0x82003000 0xb 0x82003800 0x6b >;
 			local-mac-address = [10 e2 d5 00 00 02];
 			reg-names = "control", "buffers";
@@ -134,6 +134,8 @@
         i2s_in: i2s_in@82005000 {
           compatible = "litex,i2s";
           reg = <0x82005000 0x20 0xC0000000 0x40000>;
+  		  interrupt-parent = <&intc0>;
+	      interrupts = <3 0>;
           #address-cells = <1>;
     	  #size-cells = <0>;
           reg-names = "control","fifo";
@@ -144,6 +146,8 @@
         i2s_out: i2s_out@82005800 {
           compatible = "litex,i2s";
           reg = <0x82005800 0x20 0xD0000000 0x40000>;
+          interrupt-parent = <&intc0>;
+          interrupts = <4 0>;
           #address-cells = <1>;
     	  #size-cells = <0>;
           reg-names = "control","fifo";
