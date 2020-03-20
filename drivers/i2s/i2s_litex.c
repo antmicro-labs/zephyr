@@ -68,7 +68,7 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 	if (i2s_cfg->frame_clk_freq == 0U) {
 		memset(&stream->cfg, 0, sizeof(struct i2s_config));
 		stream->state = I2S_STATE_NOT_READY;
-		return 0;
+		return-EINVAL ;
 	}
 
 	/* set I2S Data Format */
@@ -98,27 +98,27 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 
 static int i2s_litex_read(struct device *dev, void **mem_block, size_t *size)
 {
-//	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
-//	int ret;
-//
-//	if (dev_data->rx.state == I2S_STATE_NOT_READY) {
-//		LOG_DBG("invalid state");
-//		return -EIO;
-//	}
-//
-//	if (dev_data->rx.state != I2S_STATE_ERROR) {
-//		ret = k_sem_take(&dev_data->rx.sem, dev_data->rx.cfg.timeout);
-//		if (ret < 0) {
-//			return ret;
-//		}
-//	}
-//
-//	/* Get data from the beginning of RX queue */
-//	ret = queue_get(&dev_data->rx.mem_block_queue, mem_block, size);
-//	if (ret < 0) {
-//		return -EIO;
-//	}
-//
+	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
+	int ret;
+
+	if (dev_data->rx.state == I2S_STATE_NOT_READY) {
+		LOG_DBG("invalid state");
+		return -EIO;
+	}
+
+	if (dev_data->rx.state != I2S_STATE_ERROR) {
+		ret = k_sem_take(&dev_data->rx.sem, dev_data->rx.cfg.timeout);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+    
+   // if(i2s_cfg->timeout != K_FOREVER)
+   // {
+   //     LOG_ERR("driver supports only polling mode");
+   //     return -EINVAL;
+   // }
+
 	return 0;
 }
 
@@ -228,6 +228,12 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 
 	return 0;
 }
+
+static void i2s_litex_isr(void * args)
+{
+
+}
+
 static const struct i2s_driver_api i2s_litex_driver_api = {
 	.configure = i2s_litex_configure,
 	.read = i2s_litex_read,
@@ -235,21 +241,31 @@ static const struct i2s_driver_api i2s_litex_driver_api = {
 	.trigger = i2s_litex_trigger,
 };
 
-#define I2S_INIT(n)	\
-	static struct i2s_litex_data i2s_litex_data_##n; \
-    \
-	static struct i2s_litex_cfg i2s_litex_cfg_##n = { \
-		.base = DT_INST_##n##_LITEX_I2S_CONTROL_BASE_ADDRESS, \
-		.fifo_base = DT_INST_##n##_LITEX_I2S_CONTROL_BASE_ADDRESS, \
-	}; \
-	DEVICE_AND_API_INIT(i2s_##n, \
-			DT_INST_##n##_LITEX_I2S_LABEL, \
-			i2s_litex_initialize, \
-			&i2s_litex_data_##n, \
-			&i2s_litex_cfg_##n, \
-			POST_KERNEL, \
-			CONFIG_I2S_INIT_PRIORITY, \
-			&i2s_litex_driver_api)
 
+#define I2S_INIT(n)	\
+static struct i2s_litex_data i2s_litex_data_##n; \
+                            \
+static void i2s_litex_irq_config_func_##n(struct device *dev);	\
+                            \
+static struct i2s_litex_cfg i2s_litex_cfg_##n = { \
+    .base = DT_INST_##n##_LITEX_I2S_CONTROL_BASE_ADDRESS, \
+    .fifo_base = DT_INST_##n##_LITEX_I2S_CONTROL_BASE_ADDRESS, \
+	.irq_config = i2s_litex_irq_config_func_##n,		\
+}; \
+DEVICE_AND_API_INIT(i2s_##n, \
+        DT_INST_##n##_LITEX_I2S_LABEL, \
+        i2s_litex_initialize, \
+        &i2s_litex_data_##n, \
+        &i2s_litex_cfg_##n, \
+        POST_KERNEL, \
+        CONFIG_I2S_INIT_PRIORITY, \
+        &i2s_litex_driver_api);  \
+									\
+static void i2s_litex_irq_config_func_##n(struct device *dev)	\
+{									\
+	IRQ_CONNECT(DT_INST_##n##_LITEX_I2S_IRQ_0, DT_INST_##n##_LITEX_I2S_IRQ_0_PRIORITY,	\
+		    i2s_litex_isr, DEVICE_GET(i2s_##n), 0);	\
+	irq_enable(DT_INST_##n##_LITEX_I2S_IRQ_0);				\
+}
 
 I2S_INIT(0);
