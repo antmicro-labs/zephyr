@@ -37,6 +37,7 @@
 // 2is control register options
 #define I2S_DISABLE 0x0
 #define I2S_ENABLE 0x1
+#define I2S_EV_ENABLE 0x1
 #define I2S_FIFO_RESET 0x2
 
 // i2s rx 

@@ -1,7 +1,6 @@
-
 /*
- * Copyright (c) 2018 STMicroelectronics
- *
+ * Copyright (c) 2020 Antmicro
+ * 
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -19,8 +18,10 @@ LOG_MODULE_REGISTER(i2s_litex);
 
 static int i2s_litex_initialize(struct device *dev)
 {
+	const struct i2s_litex_cfg *cfg = DEV_CFG(dev);
 	struct i2s_litex_data *const dev_data =DEV_DATA(dev);
 
+	cfg->irq_config(dev);
 	k_sem_init(&dev_data->rx.sem, 0, 1);
 	k_sem_init(&dev_data->tx.sem, 0, 1);
 
@@ -99,6 +100,7 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 static int i2s_litex_read(struct device *dev, void **mem_block, size_t *size)
 {
 	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
+	const struct i2s_litex_cfg *const cfg = DEV_CFG(dev);
 	int ret;
 
 	if (dev_data->rx.state == I2S_STATE_NOT_READY) {
@@ -106,18 +108,25 @@ static int i2s_litex_read(struct device *dev, void **mem_block, size_t *size)
 		return -EIO;
 	}
 
-	if (dev_data->rx.state != I2S_STATE_ERROR) {
-		ret = k_sem_take(&dev_data->rx.sem, dev_data->rx.cfg.timeout);
-		if (ret < 0) {
-			return ret;
-		}
-	}
+//	if (dev_data->rx.state != I2S_STATE_ERROR) {
+//		ret = k_sem_take(&dev_data->rx.sem, dev_data->rx.cfg.timeout);
+//		if (ret < 0) {
+//			return ret;
+//		}
+//	}
     
    // if(i2s_cfg->timeout != K_FOREVER)
    // {
    //     LOG_ERR("driver supports only polling mode");
    //     return -EINVAL;
    // }
+        
+        LOG_INF("Reading i2s CTR 0x%x", litex_read8(I2S_RX_BASE_ADDR));
+        LOG_INF("Reading i2s CTR 0x%x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET));
+        LOG_INF("Reading i2s EV_PE 0x%x",litex_read8(cfg->base + I2S_EV_PENDING_REG_OFFSET));
+        LOG_INF("Reading i2s EV_EN 0x%x",litex_read8(cfg->base + I2S_EV_ENABLE_REG_OFFSET));
+        LOG_INF("Reading i2s STA 0x%x", litex_read32(cfg->base + I2S_STATUS_REG_OFFSET));
+        LOG_INF("Reading i2s BASE 0x%x", litex_read8(cfg->base));
 
 	return 0;
 }
@@ -169,9 +178,18 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 		}
 
         LOG_INF("Enabling i2s under %x", cfg->base + I2S_CONTROL_REG_OFFSET);
-        litex_write8(I2S_ENABLE | I2S_FIFO_RESET,
+        litex_write8(I2S_FIFO_RESET,
                     cfg->base + I2S_CONTROL_REG_OFFSET);
-        LOG_INF("Reading i2s %x value should be %x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET),I2S_ENABLE | I2S_FIFO_RESET);
+        LOG_INF("Reading i2s CTR first time 0x%x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET));
+        while(litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET) == I2S_FIFO_RESET) k_sleep(1);
+
+        LOG_INF("Reading i2s CTR second time 0x%x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET));
+
+        litex_write8(I2S_ENABLE,
+                    cfg->base + I2S_CONTROL_REG_OFFSET);
+        litex_write8(I2S_EV_ENABLE,
+                    cfg->base + I2S_EV_ENABLE_REG_OFFSET);
+        //LOG_INF("Reading i2s %x value should be %x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET),I2S_ENABLE | I2S_FIFO_RESET);
 		__ASSERT_NO_MSG(stream->mem_block == NULL);
 
 		stream->state = I2S_STATE_RUNNING;
@@ -231,7 +249,7 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 
 static void i2s_litex_isr(void * args)
 {
-
+    LOG_INF("Interrupt request receieved");
 }
 
 static const struct i2s_driver_api i2s_litex_driver_api = {
