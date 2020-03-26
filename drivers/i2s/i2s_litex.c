@@ -16,12 +16,94 @@ LOG_MODULE_REGISTER(i2s_litex);
 #define DEV_DATA(dev) \
 	((struct i2s_litex_data*const)(dev)->driver_data)
 
+/**
+ * @brief Enable RX device
+ *
+ * @param reg base control register of device 
+ *
+ * @return N/A
+ */
+static void i2s_enable(int reg)
+{
+	u8_t enable = litex_read8(reg);
+
+	litex_write8(enable | I2S_ENABLE, reg);
+}
+
+/**
+ * @brief Disable RX device
+ *
+ * @param reg base control register of device
+ *
+ * @return N/A
+ */
+static void i2s_disable(int reg)
+{
+	u8_t enable = litex_read8(reg);
+
+	litex_write8(enable & ~(I2S_ENABLE), reg);
+}
+
+/**
+ * @brief Enable RX device
+ *
+ * @param reg base control register of device 
+ *
+ * @return N/A
+ */
+static void i2s_reset_fifo(int reg)
+{
+	u8_t enable = litex_read8(reg);
+
+	litex_write8(enable | I2S_FIFO_RESET, reg);
+}
+
+/**
+ * @brief Enable RX interrupt in event register
+ *
+ * @param reg base event control register of device
+ *
+ * @param irq_type irq to be enabled
+ *
+ * @return N/A
+ */
+
+static void i2s_irq_enable(int reg, int irq_type)
+{
+	u8_t enable = litex_read8(reg);
+
+	litex_write8(enable | irq_type , reg);
+}
+
+/**
+ * @brief Disable RX interrupt in event register
+ *
+ * @param dev I2S device struct
+ *
+ * @return N/A
+ */
+static void i2s_irq_disable(int reg, int irq_type)
+{
+	u8_t enable = litex_read8(reg);
+
+	litex_write8(enable & ~(irq_type), reg);
+}
+
+
 static int i2s_litex_initialize(struct device *dev)
 {
 	const struct i2s_litex_cfg *cfg = DEV_CFG(dev);
 	struct i2s_litex_data *const dev_data =DEV_DATA(dev);
 
 	cfg->irq_config(dev);
+    u32_t fifo_depth = litex_read32(cfg->base + I2S_STATUS_REG_OFFSET);
+    fifo_depth= (fifo_depth & I2S_STAT_FIFO_DEPTH_MASK) >> I2S_STAT_FIFO_DEPTH_OFFSET;
+	if( cfg->fifo_depth != fifo_depth)
+    {
+		LOG_ERR("Incorrect fifo depth");
+		return -EINVAL;
+    }
+
 	k_sem_init(&dev_data->rx.sem, 0, 1);
 	k_sem_init(&dev_data->tx.sem, 0, 1);
 
@@ -108,12 +190,12 @@ static int i2s_litex_read(struct device *dev, void **mem_block, size_t *size)
 		return -EIO;
 	}
 
-//	if (dev_data->rx.state != I2S_STATE_ERROR) {
-//		ret = k_sem_take(&dev_data->rx.sem, dev_data->rx.cfg.timeout);
-//		if (ret < 0) {
-//			return ret;
-//		}
-//	}
+   //	if (dev_data->rx.state != I2S_STATE_ERROR) {
+   //		ret = k_sem_take(&dev_data->rx.sem, dev_data->rx.cfg.timeout);
+   //		if (ret < 0) {
+   //			return ret;
+   //		}
+   //	}
     
    // if(i2s_cfg->timeout != K_FOREVER)
    // {
@@ -121,12 +203,11 @@ static int i2s_litex_read(struct device *dev, void **mem_block, size_t *size)
    //     return -EINVAL;
    // }
         
-        LOG_INF("Reading i2s CTR 0x%x", litex_read8(I2S_RX_BASE_ADDR));
-        LOG_INF("Reading i2s CTR 0x%x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET));
-        LOG_INF("Reading i2s EV_PE 0x%x",litex_read8(cfg->base + I2S_EV_PENDING_REG_OFFSET));
-        LOG_INF("Reading i2s EV_EN 0x%x",litex_read8(cfg->base + I2S_EV_ENABLE_REG_OFFSET));
-        LOG_INF("Reading i2s STA 0x%x", litex_read32(cfg->base + I2S_STATUS_REG_OFFSET));
-        LOG_INF("Reading i2s BASE 0x%x", litex_read8(cfg->base));
+    LOG_INF("Reading i2s CTR 0x%x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET));
+    LOG_INF("Reading i2s EV_PE 0x%x",litex_read8(cfg->base + I2S_EV_PENDING_REG_OFFSET));
+    LOG_INF("Reading i2s EV_EN 0x%x",litex_read8(cfg->base + I2S_EV_ENABLE_REG_OFFSET));
+    LOG_INF("Reading i2s STA 0x%x", litex_read32(cfg->base + I2S_STATUS_REG_OFFSET));
+    LOG_INF("Reading i2s BASE 0x%x", litex_read8(cfg->base));
 
 	return 0;
 }
@@ -169,7 +250,8 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 		return -EINVAL;
 	}
 
-	switch (cmd) {
+	switch (cmd) 
+    {
 	case I2S_TRIGGER_START:
 		if (stream->state != I2S_STATE_READY) {
 			LOG_ERR("START trigger: invalid state %d",
@@ -177,22 +259,19 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 			return -EIO;
 		}
 
-        LOG_INF("Enabling i2s under %x", cfg->base + I2S_CONTROL_REG_OFFSET);
-        litex_write8(I2S_FIFO_RESET,
-                    cfg->base + I2S_CONTROL_REG_OFFSET);
-        LOG_INF("Reading i2s CTR first time 0x%x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET));
-        while(litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET) == I2S_FIFO_RESET) k_sleep(1);
-
-        LOG_INF("Reading i2s CTR second time 0x%x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET));
-
-        litex_write8(I2S_ENABLE,
-                    cfg->base + I2S_CONTROL_REG_OFFSET);
-        litex_write8(I2S_EV_ENABLE,
-                    cfg->base + I2S_EV_ENABLE_REG_OFFSET);
-        //LOG_INF("Reading i2s %x value should be %x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET),I2S_ENABLE | I2S_FIFO_RESET);
 		__ASSERT_NO_MSG(stream->mem_block == NULL);
+        LOG_INF("Enabling i2s under %x", cfg->base + I2S_CONTROL_REG_OFFSET);
 
-		stream->state = I2S_STATE_RUNNING;
+        i2s_reset_fifo(cfg->base + I2S_CONTROL_REG_OFFSET);
+        while(litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET) == I2S_FIFO_RESET)
+        {
+            k_sleep(1);
+        }
+
+        i2s_enable(cfg->base + I2S_CONTROL_REG_OFFSET);
+        //i2s_irq_enable(cfg->base + I2S_EV_ENABLE_REG_OFFSET, I2S_EV_READY);       
+        //i2s_irq_enable(cfg->base + I2S_EV_ENABLE_REG_OFFSET, I2S_EV_ERROR);       
+        stream->state = I2S_STATE_RUNNING;
 		break;
 	case I2S_TRIGGER_STOP:
 		if (stream->state != I2S_STATE_RUNNING) {
@@ -200,10 +279,10 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 			return -EIO;
 		}
         LOG_INF("Disabling i2s under %x", cfg->base + I2S_CONTROL_REG_OFFSET);
-        litex_write8(I2S_DISABLE | I2S_FIFO_RESET,
-                    cfg->base + I2S_CONTROL_REG_OFFSET);
-        LOG_INF("Reading i2s %x value should be %x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET),I2S_DISABLE | I2S_FIFO_RESET);
-//      stream->queue_drop(stream);
+        i2s_disable(cfg->base + I2S_CONTROL_REG_OFFSET);
+        //i2s_irq_disable(cfg->base + I2S_EV_ENABLE_REG_OFFSET, I2S_EV_READY);       
+        //i2s_irq_disable(cfg->base + I2S_EV_ENABLE_REG_OFFSET, I2S_EV_ERROR);       
+        //stream->queue_drop(stream);
 		stream->state = I2S_STATE_READY;
 		break;
 
@@ -247,9 +326,24 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 	return 0;
 }
 
-static void i2s_litex_isr(void * args)
+static void i2s_litex_isr_RX(void * args)
 {
     LOG_INF("Interrupt request receieved");
+    char buff[512];
+    memcpy(buff,(const void*) I2S_RX_FIFO_ADDR, 256);
+    
+    // clear pending events
+    litex_write8(I2S_EV_READY | I2S_EV_ERROR, I2S_RX_EV_PENDING_REG);
+}
+
+static void i2s_litex_isr_TX(void * args)
+{
+    LOG_INF("Interrupt request receieved");
+    char buff[512];
+    memcpy(buff,(const void*) I2S_TX_FIFO_ADDR, 256);
+    
+    // clear pending events
+    litex_write8(I2S_EV_READY | I2S_EV_ERROR, I2S_TX_EV_PENDING_REG);
 }
 
 static const struct i2s_driver_api i2s_litex_driver_api = {
@@ -260,14 +354,15 @@ static const struct i2s_driver_api i2s_litex_driver_api = {
 };
 
 
-#define I2S_INIT(n)	\
+#define I2S_INIT(n, dir)	\
 static struct i2s_litex_data i2s_litex_data_##n; \
                             \
 static void i2s_litex_irq_config_func_##n(struct device *dev);	\
                             \
 static struct i2s_litex_cfg i2s_litex_cfg_##n = { \
-    .base = DT_INST_##n##_LITEX_I2S_CONTROL_BASE_ADDRESS, \
-    .fifo_base = DT_INST_##n##_LITEX_I2S_CONTROL_BASE_ADDRESS, \
+    .base = I2S_##dir##_BASE_ADDR, \
+    .fifo_base = I2S_##dir##_FIFO_ADDR, \
+    .fifo_depth = I2S_##dir##_FIFO_DEPTH, \
 	.irq_config = i2s_litex_irq_config_func_##n,		\
 }; \
 DEVICE_AND_API_INIT(i2s_##n, \
@@ -282,8 +377,8 @@ DEVICE_AND_API_INIT(i2s_##n, \
 static void i2s_litex_irq_config_func_##n(struct device *dev)	\
 {									\
 	IRQ_CONNECT(DT_INST_##n##_LITEX_I2S_IRQ_0, DT_INST_##n##_LITEX_I2S_IRQ_0_PRIORITY,	\
-		    i2s_litex_isr, DEVICE_GET(i2s_##n), 0);	\
+		    i2s_litex_isr_##dir, DEVICE_GET(i2s_##n), 0);	\
 	irq_enable(DT_INST_##n##_LITEX_I2S_IRQ_0);				\
 }
 
-I2S_INIT(0);
+I2S_INIT(0,RX);
