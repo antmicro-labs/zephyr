@@ -148,6 +148,22 @@ static int i2s_get_fifo_depth(int reg)
 }
 
 
+/**
+ * @brief Return FIFO depth defined by i2s driver 
+ *
+ * @param dst memeory destination where data will be copied to.
+ *
+ * @return N/A
+ */
+static void i2s_fifocpy(u32_t *dst, size_t size)
+{
+    for(int i =0; i < size; ++i)
+    {
+        *(dst+i) = sys_read32(I2S_RX_FIFO_ADDR + i*sizeof(u32_t));
+    }
+}
+
+
 static int i2s_litex_initialize(struct device *dev)
 {
 	const struct i2s_litex_cfg *cfg = DEV_CFG(dev);
@@ -265,13 +281,19 @@ static int i2s_litex_read(struct device *dev, void **mem_block, size_t *size)
    // {
    //     LOG_INF("%x ", litex_read32(I2S_RX_FIFO_ADDR));
    // }
-    i2s_enable(cfg->base);
+    bool ready = i2s_is_dataready(cfg->base);
+    u32_t fifo_data[16];
     LOG_INF("Reading i2s CTR 0x%x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET));
     LOG_INF("Reading i2s EV_PE 0x%x",litex_read8(cfg->base + I2S_EV_PENDING_REG_OFFSET));
     LOG_INF("Reading i2s EV_EN 0x%x",litex_read8(cfg->base + I2S_EV_ENABLE_REG_OFFSET));
     LOG_INF("Reading i2s STA 0x%x", litex_read32(cfg->base + I2S_STATUS_REG_OFFSET));
     LOG_INF("Reading i2s BASE 0x%x", litex_read8(cfg->base));
-
+    LOG_INF("Is ready 0x%x", ready);
+    if( ready == true)
+    {
+        //i2s_fifocpy(fifo_data, cfg->fifo_depth/32);
+        //LOG_INF("Reading i2s FIFO  0x%x",sys_read32(I2S_RX_FIFO_ADDR));
+    }
 	return 0;
 }
 
@@ -328,7 +350,7 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
         i2s_reset_fifo(cfg->base);
         while(litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET) == I2S_FIFO_RESET)
         {
-            k_sleep(1);
+           k_sleep(1);
         }
 
         i2s_enable(cfg->base);
