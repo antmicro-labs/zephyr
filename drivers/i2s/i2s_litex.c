@@ -96,7 +96,7 @@ static void i2s_irq_disable(int reg, int irq_type)
  *
  * @param reg base register of device
  *
- * @return bool owerflow status
+ * @return bool true if overflow occured, false otherwise
  */
 static bool i2s_is_overflow(int reg)
 {
@@ -110,7 +110,7 @@ static bool i2s_is_overflow(int reg)
  *
  * @param reg base register of device
  *
- * @return bool underflow status
+ * @return bool true if underflow occured, false otherwise
  */
 static bool i2s_is_underflow(int reg)
 {
@@ -124,7 +124,7 @@ static bool i2s_is_underflow(int reg)
  *
  * @param reg base register of device
  *
- * @return bool dataready status
+ * @return bool true if data is ready to read, false otherwise
  */
 static bool i2s_is_dataready(int reg)
 {
@@ -133,6 +133,47 @@ static bool i2s_is_dataready(int reg)
     return (status_reg & I2S_STAT_DATAREADY_MASK);
 }
 
+/**
+ * @brief Get i2s empty status 
+ *
+ * @param reg base register of device
+ *
+ * @return bool true if fifo empty false otherwise
+ */
+static bool i2s_is_empty(int reg)
+{
+    u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
+    
+    return (status_reg & I2S_STAT_EMPTY_MASK);
+}
+
+/**
+ * @brief Get i2s wrcount info 
+ *
+ * @param reg base register of device
+ *
+ * @return u32_t return amount of data ready to write
+ */
+static u32_t i2s_get_wrcount(int reg)
+{
+    u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
+    
+    return (status_reg & I2S_STAT_WRCOUNT_MASK) >> I2S_STAT_WRCOUNT_OFFSET;
+}
+
+/**
+ * @brief Get i2s rdcount info 
+ *
+ * @param reg base register of device
+ *
+ * @return u32_t return amount of data ready to read
+ */
+static u32_t i2s_get_rdcount(int reg)
+{
+    u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
+    
+    return (status_reg & I2S_STAT_RDCOUNT_MASK) >> I2S_STAT_RDCOUNT_OFFSET;
+}
 /**
  * @brief Return FIFO depth defined by i2s driver 
  *
@@ -147,22 +188,35 @@ static int i2s_get_fifo_depth(int reg)
     return ((status_reg & I2S_STAT_FIFO_DEPTH_MASK) >> I2S_STAT_FIFO_DEPTH_OFFSET);
 }
 
-
 /**
  * @brief Return FIFO depth defined by i2s driver 
  *
- * @param dst memeory destination where data will be copied to.
+ * @param dst memeory destination where data will be copied from fifo buffer.
+ *
+ * @param size amount of data to be copied
  *
  * @return N/A
  */
-static void i2s_fifocpy(u32_t *dst, size_t size)
+static void i2s_copy_fifo(u32_t *dst, size_t size)
 {
-    for(int i =0; i < size; ++i)
+    for(size_t i =0; i < size; ++i)
     {
-        *(dst+i) = sys_read32(I2S_RX_FIFO_ADDR + i*sizeof(u32_t));
+       *(dst+i) = sys_read32(I2S_RX_FIFO_ADDR + i*sizeof(u32_t));
     }
 }
 
+static void debug_registers(int reg)
+{
+    LOG_INF("Reading i2s CTR 0x%x", litex_read8(reg + I2S_CONTROL_REG_OFFSET));
+    LOG_INF("Reading i2s EV_PE 0x%x",litex_read8(reg + I2S_EV_PENDING_REG_OFFSET));
+    LOG_INF("Overflow status 0x%x", i2s_is_overflow(reg));
+    LOG_INF("Underflow status 0x%x", i2s_is_underflow(reg));
+    LOG_INF("Is empty 0x%x", i2s_is_empty(reg));
+    LOG_INF("Is ready 0x%x", i2s_is_dataready(reg));
+    LOG_INF("Write count 0x%x", i2s_get_wrcount(reg));
+    LOG_INF("Read count 0x%x",i2s_get_rdcount(reg) );
+    LOG_INF("fifo size 0x%x",i2s_get_fifo_depth(reg));
+}
 
 static int i2s_litex_initialize(struct device *dev)
 {
@@ -177,8 +231,8 @@ static int i2s_litex_initialize(struct device *dev)
 		return -EINVAL;
     }
 
-	k_sem_init(&dev_data->rx.sem, 0, 1);
-	k_sem_init(&dev_data->tx.sem, 0, 1);
+	//k_sem_init(&dev_data->rx.sem, 0, 1);
+	//k_sem_init(&dev_data->tx.sem, 0, 1);
 
 	LOG_INF("%s inited", dev->config->name);
 
@@ -281,18 +335,14 @@ static int i2s_litex_read(struct device *dev, void **mem_block, size_t *size)
    // {
    //     LOG_INF("%x ", litex_read32(I2S_RX_FIFO_ADDR));
    // }
+    u32_t fifo_data[512];
+    debug_registers(cfg->base);
+    
     bool ready = i2s_is_dataready(cfg->base);
-    u32_t fifo_data[16];
-    LOG_INF("Reading i2s CTR 0x%x", litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET));
-    LOG_INF("Reading i2s EV_PE 0x%x",litex_read8(cfg->base + I2S_EV_PENDING_REG_OFFSET));
-    LOG_INF("Reading i2s EV_EN 0x%x",litex_read8(cfg->base + I2S_EV_ENABLE_REG_OFFSET));
-    LOG_INF("Reading i2s STA 0x%x", litex_read32(cfg->base + I2S_STATUS_REG_OFFSET));
-    LOG_INF("Reading i2s BASE 0x%x", litex_read8(cfg->base));
-    LOG_INF("Is ready 0x%x", ready);
     if( ready == true)
     {
-        //i2s_fifocpy(fifo_data, cfg->fifo_depth/32);
-        //LOG_INF("Reading i2s FIFO  0x%x",sys_read32(I2S_RX_FIFO_ADDR));
+        i2s_copy_fifo(fifo_data, cfg->fifo_depth);
+        LOG_INF("Reading i2s FIFO  0x%x",fifo_data[0]);
     }
 	return 0;
 }
