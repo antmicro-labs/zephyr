@@ -54,7 +54,8 @@
 
 #define I2S_RX_FIFO_ADDR DT_INST_0_LITEX_I2S_BASE_ADDRESS_1
 #define I2S_RX_FIFO_DEPTH (DT_INST_0_LITEX_I2S_FIFO_DEPTH ) 
-
+// i2s rx irq
+#define I2S_RX_IRQ DT_INST_0_LITEX__I2S_IRQ_0
 
 // i2s tx 
 #define I2S_TX_BASE_ADDR DT_INST_1_LITEX_I2S_BASE_ADDRESS_0
@@ -66,7 +67,11 @@
 
 #define I2S_TX_FIFO_ADDR DT_INST_1_LITEX_I2S_BASE_ADDRESS_1
 #define I2S_TX_FIFO_DEPTH (DT_INST_1_LITEX_I2S_FIFO_DEPTH ) 
-
+// i2s tx irq
+#define I2S_TX_IRQ DT_INST_1_LITEX__I2S_IRQ_0
+// enable irq on request
+// htis should be moved to kconfig, ore removed at all
+ #define I2S_IRQ_ENABLED
 
 struct stream {
 	s32_t state;

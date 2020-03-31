@@ -223,16 +223,13 @@ static int i2s_litex_initialize(struct device *dev)
 	const struct i2s_litex_cfg *cfg = DEV_CFG(dev);
 	struct i2s_litex_data *const dev_data =DEV_DATA(dev);
 #ifdef I2S_IRQ_ENABLED
-	cfg->irq_config(dev);
+    cfg->irq_config(dev);
 #endif
 	if(cfg->fifo_depth != i2s_get_fifo_depth(cfg->base))
     {
 		LOG_ERR("Incorrect fifo depth");
 		return -EINVAL;
     }
-
-	//k_sem_init(&dev_data->rx.sem, 0, 1);
-	//k_sem_init(&dev_data->tx.sem, 0, 1);
 
 	LOG_INF("%s inited", dev->config->name);
 
@@ -396,17 +393,16 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 
 		__ASSERT_NO_MSG(stream->mem_block == NULL);
         LOG_INF("Enabling i2s under %x", cfg->base + I2S_CONTROL_REG_OFFSET);
-
+        LOG_INF("IS ENABLED 0x%x", arch_irq_is_enabled(3));
         i2s_reset_fifo(cfg->base);
         while(litex_read8(cfg->base + I2S_CONTROL_REG_OFFSET) == I2S_FIFO_RESET)
         {
            k_sleep(1);
         }
-
         i2s_enable(cfg->base);
 #ifdef I2S_IRQ_ENABLED
         i2s_irq_enable(cfg->base, I2S_EV_READY);       
-        i2s_irq_enable(cfg->base, I2S_EV_ERROR);
+	    sys_write8(sys_read8(I2S_RX_EV_PENDING_REG), I2S_RX_EV_PENDING_REG);
 #endif
         stream->state = I2S_STATE_RUNNING;
 		break;
@@ -419,7 +415,6 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
         i2s_disable(cfg->base);
 #ifdef I2S_IRQ_ENABLED
         i2s_irq_disable(cfg->base, I2S_EV_READY);       
-        i2s_irq_disable(cfg->base, I2S_EV_ERROR);
 #endif
         //stream->queue_drop(stream);
 		stream->state = I2S_STATE_READY;
@@ -464,15 +459,23 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 
 	return 0;
 }
-
 static void i2s_litex_isr_RX(void * args)
 {
-    //LOG_INF("Interrupt request receieved");
-    //char buff[512];
-    //memcpy(buff,(const void*) I2S_RX_FIFO_ADDR, 256);
+    debug_registers(I2S_RX_BASE_ADDR);
     
+    static u32_t fifo_data[512];
+    bool ready = i2s_is_dataready(I2S_RX_BASE_ADDR);
+    if( ready == true)
+    {
+        i2s_copy_fifo(fifo_data, 256);
+        LOG_INF("Reading i2s FIFO  0x%x",fifo_data[0]);
+    }
     // clear pending events
-    litex_write8(I2S_EV_READY | I2S_EV_ERROR, I2S_RX_EV_PENDING_REG);
+	sys_write8(sys_read8(I2S_RX_EV_PENDING_REG), I2S_RX_EV_PENDING_REG);
+    
+   // if(asdf > 1000)
+   //     i2s_irq_disable(I2S_RX_BASE_ADDR, I2S_EV_READY);       
+   // asdf++;
 }
 
 static void i2s_litex_isr_TX(void * args)
@@ -500,7 +503,7 @@ static struct i2s_litex_cfg i2s_litex_cfg_##n = { \
     .base = I2S_##dir##_BASE_ADDR, \
     .fifo_base = I2S_##dir##_FIFO_ADDR, \
     .fifo_depth = I2S_##dir##_FIFO_DEPTH, \
-	.irq_config = i2s_litex_irq_config_func_##n,		\
+    .irq_config = i2s_litex_irq_config_func_##n \
 }; \
 DEVICE_AND_API_INIT(i2s_##n, \
         DT_INST_##n##_LITEX_I2S_LABEL, \
@@ -515,7 +518,8 @@ static void i2s_litex_irq_config_func_##n(struct device *dev)	\
 {									\
 	IRQ_CONNECT(DT_INST_##n##_LITEX_I2S_IRQ_0, DT_INST_##n##_LITEX_I2S_IRQ_0_PRIORITY,	\
 		    i2s_litex_isr_##dir, DEVICE_GET(i2s_##n), 0);	\
-	irq_enable(DT_INST_##n##_LITEX_I2S_IRQ_0);				\
+	irq_enable(DT_INST_##n##_LITEX_I2S_IRQ_0);	\
+    i2s_disable(I2S_##dir##_BASE_ADDR);\
 }
 
 I2S_INIT(0,RX);
