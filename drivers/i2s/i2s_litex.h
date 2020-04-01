@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Antmicro <www.antmicro.com>
+ * Copyright (c) 2020 Antmicro <www.antmicro.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -73,10 +73,26 @@
 // htis should be moved to kconfig, ore removed at all
  #define I2S_IRQ_ENABLED
 
+struct queue_item {
+	void *mem_block;
+	size_t size;
+};
+
+/* Minimal ring buffer implementation */
+struct ring_buf {
+	struct queue_item *buf;
+	u16_t len;
+	u16_t head;
+	u16_t tail;
+};
+
 struct stream {
 	s32_t state;
 	struct k_sem sem;
 	struct i2s_config cfg;
+	struct ring_buf mem_block_queue;
+	void *mem_block;
+	bool last_block;
 };
 
 /* Device run time data */
