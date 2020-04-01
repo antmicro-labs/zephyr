@@ -7,6 +7,7 @@
 #include <string.h>
 #include <drivers/i2s.h>
 #include <soc.h>
+#include <sys/util.h>
 
 #include "i2s_litex.h"
 #include <logging/log.h>
@@ -17,7 +18,7 @@ LOG_MODULE_REGISTER(i2s_litex);
 	((struct i2s_litex_data*const)(dev)->driver_data)
 
 #define MODULO_INC(val, max) { val = (++val < max) ? val : 0; }
-#define CONFIG_I2S_RX_BLOCK_COUNT 5
+#define CONFIG_I2S_BLOCK_COUNT 5
 /**
  * @brief Enable RX device
  *
@@ -278,7 +279,7 @@ static int i2s_litex_initialize(struct device *dev)
     cfg->irq_config(dev);
 #endif
     cfg->fifo_depth = i2s_get_fifo_depth(cfg->base);
-	k_sem_init(&dev_data->rx.sem, 0, CONFIG_I2S_RX_BLOCK_COUNT);
+	k_sem_init(&dev_data->rx.sem, 0, CONFIG_I2S_BLOCK_COUNT);
 
 	LOG_INF("%s inited %x", dev->config->name, cfg->fifo_depth);
 
@@ -359,9 +360,8 @@ static int i2s_litex_read(struct device *dev, void **mem_block, size_t *size)
     int ret;
 	if (dev_data->rx.state == I2S_STATE_NOT_READY) {
 		LOG_DBG("invalid state");
-		return -EIO;
+		return -ENOMEM;
 	}
-
    	if (dev_data->rx.state != I2S_STATE_ERROR) {
    		ret = k_sem_take(&dev_data->rx.sem, dev_data->rx.cfg.timeout);
    		if (ret < 0) {
@@ -371,10 +371,9 @@ static int i2s_litex_read(struct device *dev, void **mem_block, size_t *size)
 	/* Get data from the beginning of RX queue */
 	ret = queue_get(&dev_data->rx.mem_block_queue, mem_block, size);
 	if (ret < 0) {
-		return -EIO;
+		return -ENOMEM;
 	}
-        
-    debug_registers(cfg->base);
+    //debug_registers(cfg->base);
 	return 0;
 }
 
@@ -399,7 +398,6 @@ static int i2s_litex_write(struct device *dev, void *mem_block, size_t size)
 //
 	return 0;
 }
-
 static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 			     enum i2s_trigger_cmd cmd)
 {
@@ -461,14 +459,13 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 	return 0;
 }
 
-static void i2s_litex_isr_RX(void * arg)
+static void i2s_litex_isr_rx(void * arg)
 {
 	struct device *const dev = (struct device *) arg;
 	const struct i2s_litex_cfg *cfg = DEV_CFG(dev);
 	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
 	struct stream *stream = &dev_data->rx;
 	int ret;
-
 	/* Prepare to receive the next data block */
 	ret = k_mem_slab_alloc(stream->cfg.mem_slab, &stream->mem_block,
 			       K_NO_WAIT);
@@ -487,10 +484,10 @@ static void i2s_litex_isr_RX(void * arg)
 	}
 	k_sem_give(&stream->sem);
     // clear pending events
-	sys_write8(sys_read8(I2S_RX_EV_PENDING_REG), I2S_RX_EV_PENDING_REG);
+	sys_write8(I2S_EV_READY | I2S_EV_ERROR, I2S_RX_EV_PENDING_REG);
 }
 
-static void i2s_litex_isr_TX(void * args)
+static void i2s_litex_isr_tx(void * args)
 {
     LOG_INF("Interrupt request receieved");
     
@@ -505,16 +502,22 @@ static const struct i2s_driver_api i2s_litex_driver_api = {
 	.trigger = i2s_litex_trigger,
 };
 
-
-#define I2S_INIT(n, dir)	\
-static struct i2s_litex_data i2s_litex_data_##n; \
-                            \
+#define I2S_INIT(n,dir)	\
+									\
+struct queue_item rx_##n##_ring_buf[CONFIG_I2S_BLOCK_COUNT+ 1];\
+									\
+static struct i2s_litex_data i2s_litex_data_##n = { \
+    .dir.mem_block_queue.buf = dir##_##n##_ring_buf,		\
+	.dir.mem_block_queue.len = CONFIG_I2S_BLOCK_COUNT+1,	\
+    .dir.mem_block_queue.head = 0,  \
+    .dir.mem_block_queue.tail = 0, \
+}; \
+    \
 static void i2s_litex_irq_config_func_##n(struct device *dev);	\
                             \
 static struct i2s_litex_cfg i2s_litex_cfg_##n = { \
-    .base = I2S_##dir##_BASE_ADDR, \
-    .fifo_base = I2S_##dir##_FIFO_ADDR, \
-    .fifo_depth = I2S_##dir##_FIFO_DEPTH, \
+    .base = DT_INST_##n##_LITEX_I2S_BASE_ADDRESS_0, \
+    .fifo_base = DT_INST_##n##_LITEX_I2S_BASE_ADDRESS_1, \
     .irq_config = i2s_litex_irq_config_func_##n \
 }; \
 DEVICE_AND_API_INIT(i2s_##n, \
@@ -531,7 +534,7 @@ static void i2s_litex_irq_config_func_##n(struct device *dev)	\
 	IRQ_CONNECT(DT_INST_##n##_LITEX_I2S_IRQ_0, DT_INST_##n##_LITEX_I2S_IRQ_0_PRIORITY,	\
 		    i2s_litex_isr_##dir, DEVICE_GET(i2s_##n), 0);	\
 	irq_enable(DT_INST_##n##_LITEX_I2S_IRQ_0);	\
-    i2s_disable(I2S_##dir##_BASE_ADDR);\
+    i2s_disable(DT_INST_##n##_LITEX_I2S_BASE_ADDRESS_0);\
 }
 
-I2S_INIT(0,RX);
+I2S_INIT(0,rx);
