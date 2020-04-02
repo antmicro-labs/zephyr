@@ -135,7 +135,7 @@
           compatible = "litex,i2s";
           reg = <0x82005000 0x20 0xb1000000 0x40000>;
   		  interrupt-parent = <&intc0>;
-	      interrupts = <3 0>;
+	      interrupts = <3 2>;
           #address-cells = <1>;
     	  #size-cells = <0>;
           reg-names = "control","fifo";
