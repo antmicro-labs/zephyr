@@ -75,15 +75,16 @@ void main(void)
     {
         ret = i2s_read(host_i2s_dev,&in_buf, &size);
         printk("i2s_read stat: %i\n", ret);
-        printk("some bytes:%i \n", *((char*)in_buf));
+        printk("some bytes:%x \n", *((u32_t*)in_buf)+1);
 
         if (ret != 0) {
-            printk("i3s timeout.\n");
+            printk("i2s timeout.\n");
             k_sleep(K_SECONDS(2));
             exit(-1);
         }
         k_mem_slab_free(&i2s_mem_slab, &in_buf);
     }
+
 //	ret = i2s_trigger(host_i2s_dev, I2S_DIR_RX, I2S_TRIGGER_STOP);
 //	if (ret != 0) {
 //		printk("dmic_trigger failed with %d error", ret);
