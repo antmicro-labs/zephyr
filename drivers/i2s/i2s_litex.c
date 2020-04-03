@@ -361,7 +361,7 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
         return -EINVAL;
     }else if(i2s_cfg->block_size != cfg->fifo_depth*FIFO_WORD_SIZE)
     {
-        LOG_INF("caustion, you buffer is greater than required. Only %i bytes of buffer will be filled by driver", cfg->fifo_depth*FIFO_WORD_SIZE);
+        LOG_INF("caution, you buffer is greater than required. Only %i bytes of buffer will be filled by driver", cfg->fifo_depth*FIFO_WORD_SIZE);
     }
 
 	/* set I2S Data Format */
@@ -468,8 +468,8 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
             memset(((void*)I2S_TX_FIFO_ADDR),0xff, MAX_FIFO_DEPTH*FIFO_WORD_SIZE);
         }
         i2s_enable(cfg->base);
-        i2s_irq_enable(cfg->base, I2S_EV_READY);       
-	    sys_write8(sys_read8(I2S_RX_EV_PENDING_REG), I2S_RX_EV_PENDING_REG);
+        i2s_irq_enable(cfg->base, I2S_EV_READY);     
+        i2s_clear_pending_irq(cfg->base);
         stream->state = I2S_STATE_RUNNING;
 		break;
 	case I2S_TRIGGER_STOP:
