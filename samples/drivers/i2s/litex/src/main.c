@@ -38,7 +38,7 @@ void main(void)
 	struct i2s_config i2s_cfg_tx;
 
     int ret;
-	
+	k_sleep(K_SECONDS(5));
     i2s_rx_dev = device_get_binding("i2s_rx");
     i2s_tx_dev = device_get_binding("i2s_tx");
 
@@ -108,7 +108,6 @@ void main(void)
 		printk("dmic_trigger failed with %d error", ret);
 		exit(-1);
 	}
-    sys_write8(0xf, 0x82006000);
     
     void*in_buf;
     size_t size;
