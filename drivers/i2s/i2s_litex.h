@@ -99,7 +99,6 @@ struct stream {
 	struct i2s_config cfg;
 	struct ring_buf mem_block_queue;
 	void *mem_block;
-	bool last_block;
 };
 
 /* Device run time data */

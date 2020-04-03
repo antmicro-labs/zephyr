@@ -338,6 +338,7 @@ static int i2s_litex_initialize(struct device *dev)
 	struct i2s_litex_data *const dev_data =DEV_DATA(dev);
     cfg->irq_config(dev);
 	k_sem_init(&dev_data->rx.sem, 0, CONFIG_I2S_BLOCK_COUNT);
+	k_sem_init(&dev_data->tx.sem, 0, CONFIG_I2S_BLOCK_COUNT);
 
 	LOG_INF("%s inited %x", dev->config->name, cfg->fifo_depth);
 
@@ -494,7 +495,6 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
         if(dir == I2S_DIR_TX)
         {
             memset(((void*)cfg->fifo_base),0xff,cfg->fifo_depth*FIFO_WORD_SIZE);
-            sys_write8(0xf, 0x82006000);
         }
         i2s_enable(cfg->base);
         i2s_irq_enable(cfg->base, I2S_EV_READY);     
@@ -551,7 +551,7 @@ static void i2s_litex_isr_tx(void * arg)
 	struct device *const dev = (struct device *) arg;
 	const struct i2s_litex_cfg *cfg = DEV_CFG(dev);
 	size_t mem_block_size;
-	struct stream *stream = &DEV_DATA(dev)->rx;
+	struct stream *stream = &DEV_DATA(dev)->tx;
 	int ret;
     // here should be some code which prevents
     // irq from stalling processor
