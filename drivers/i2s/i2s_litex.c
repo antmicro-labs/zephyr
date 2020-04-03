@@ -160,22 +160,22 @@ static bool i2s_rx_is_dataready(int reg)
 static bool i2s_rx_is_empty(int reg)
 {
     u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
-    
-    return (status_reg & I2S_RX_STAT_EMPTY_MASK);
+        
+    return (status_reg & I2S_RX_STAT_EMPTY_MASK) >> I2S_TX_STAT_FREE_OFFSET;
 }
 
 /**
- * @brief Get i2s dataready status 
+ * @brief Check if i2s tx buffe is empty 
  *
  * @param reg base register of device
  *
  * @return bool true if data is ready to read, false otherwise
  */
-static bool i2s_tx_is_full(int reg)
+static bool i2s_tx_is_free(int reg)
 {
     u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
     
-    return (status_reg & I2S_TX_STAT_FULL_MASK);
+    return (status_reg & I2S_TX_STAT_FREE_MASK);
 }
 
 /**
@@ -338,7 +338,7 @@ static int i2s_litex_initialize(struct device *dev)
 	struct i2s_litex_data *const dev_data =DEV_DATA(dev);
     cfg->irq_config(dev);
 	k_sem_init(&dev_data->rx.sem, 0, CONFIG_I2S_BLOCK_COUNT);
-	k_sem_init(&dev_data->tx.sem, 0, CONFIG_I2S_BLOCK_COUNT);
+	k_sem_init(&dev_data->tx.sem, CONFIG_I2S_BLOCK_COUNT-1, CONFIG_I2S_BLOCK_COUNT);
 
 	LOG_INF("%s inited %x", dev->config->name, cfg->fifo_depth);
 
@@ -441,6 +441,7 @@ static int i2s_litex_write(struct device *dev, void *mem_block, size_t size)
 	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
 	int ret;
 
+#if defined(I2S_TX_IRQ_EN) && I2S_TX_IRQ_EN == 1
 	if (dev_data->tx.state != I2S_STATE_RUNNING &&
 	    dev_data->tx.state != I2S_STATE_READY) {
 		LOG_DBG("invalid state");
@@ -453,6 +454,15 @@ static int i2s_litex_write(struct device *dev, void *mem_block, size_t size)
 	}
 	/* Add data to the end of the TX queue */
 	queue_put(&dev_data->tx.mem_block_queue, mem_block, size);
+#else
+	const struct i2s_litex_cfg *const cfg = DEV_CFG(dev);
+    while(i2s_tx_is_free(cfg->base))
+    {
+        continue;
+    }
+    i2s_copy_to_fifo(mem_block, size);
+
+#endif
 
 	return 0;
 }
@@ -497,8 +507,15 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
             memset(((void*)cfg->fifo_base),0xff,cfg->fifo_depth*FIFO_WORD_SIZE);
         }
         i2s_enable(cfg->base);
-        i2s_irq_enable(cfg->base, I2S_EV_READY);     
-        i2s_clear_pending_irq(cfg->base);
+#if defined(I2S_TX_IRQ_EN) && I2S_TX_IRQ_EN == 1
+        if(dir == I2S_DIR_RX)
+        {
+#endif
+            i2s_irq_enable(cfg->base, I2S_EV_READY);     
+            i2s_clear_pending_irq(cfg->base);
+#if defined(I2S_TX_IRQ_EN) && I2S_TX_IRQ_EN == 1
+        }
+#endif
         stream->state = I2S_STATE_RUNNING;
 		break;
 	case I2S_TRIGGER_STOP:
@@ -554,7 +571,7 @@ static void i2s_litex_isr_tx(void * arg)
 	struct stream *stream = &DEV_DATA(dev)->tx;
 	int ret;
     // here should be some code which prevents
-    // irq from stalling processor
+    // irq from blocking processor
 	ret = queue_get(&stream->mem_block_queue, &stream->mem_block,
 			&mem_block_size);
 	if (ret < 0) {
@@ -565,7 +582,6 @@ static void i2s_litex_isr_tx(void * arg)
 		return;
 	}
 	k_sem_give(&stream->sem);
-
     i2s_copy_to_fifo((u32_t*)stream->mem_block, cfg->fifo_depth);
     i2s_clear_pending_irq(cfg->base);
 }

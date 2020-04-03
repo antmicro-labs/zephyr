@@ -114,14 +114,20 @@ void main(void)
     while(true)
     {
         ret = i2s_read(i2s_rx_dev,&in_buf, &size);
-        printk("i2s_read stat: %i\n", ret);
+        printk("i2s_read size: %i\n", size);
         printk("some bytes:%x \n", *((u32_t*)in_buf)+1);
 
         if (ret != 0) {
-            printk("i2s timeout.\n");
-            k_sleep(K_SECONDS(2));
+            printk("i2s read error\n");
             exit(-1);
         }
+
+        ret = i2s_write(i2s_tx_dev,in_buf, size);
+        if (ret != 0) {
+            printk("i2s write error.\n");
+            exit(-1);
+        }
+
         k_mem_slab_free(&i2s_rx_mem_slab, &in_buf);
     }
 
