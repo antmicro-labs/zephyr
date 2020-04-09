@@ -18,7 +18,7 @@ LOG_MODULE_REGISTER(i2s_litex);
 	((struct i2s_litex_data*const)(dev)->driver_data)
 
 #define MODULO_INC(val, max) { val = (++val < max) ? val : 0; }
-#define CONFIG_I2S_BLOCK_COUNT 5
+#define CONFIG_I2S_BLOCK_COUNT 2100
 /**
  * @brief Enable RX device
  *
@@ -491,6 +491,7 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 	return 0;
 }
 
+static int read_blocks = 0;
 static void i2s_litex_isr_rx(void * arg)
 {
 	struct device *const dev = (struct device *) arg;
@@ -498,20 +499,21 @@ static void i2s_litex_isr_rx(void * arg)
 	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
 	struct stream *stream = &dev_data->rx;
 	int ret;
+    //static u32_t trash[512];
 	/* Prepare to receive the next data block */
 	ret = k_mem_slab_alloc(stream->cfg.mem_slab, &stream->mem_block,
 			       K_NO_WAIT);
 	if (ret < 0) {
-		stream->state = I2S_STATE_ERROR;
+        //i2s_copy_from_fifo(trash, cfg->fifo_depth);
+        //i2s_clear_pending_irq(cfg->base);
 		return;
 	}
     i2s_copy_from_fifo((u32_t*)stream->mem_block, cfg->fifo_depth);
     i2s_clear_pending_irq(cfg->base);
 	ret = queue_put(&stream->mem_block_queue, stream->mem_block,
 			stream->cfg.block_size);
-	
+	read_blocks++;
     if (ret < 0) {
-		stream->state = I2S_STATE_ERROR;
 		return;
 	}
 	k_sem_give(&stream->sem);
@@ -534,6 +536,10 @@ static void i2s_litex_isr_tx(void * arg)
 
     i2s_copy_to_fifo((u32_t*)stream->mem_block, cfg->fifo_depth);
     i2s_clear_pending_irq(cfg->base);
+}
+bool is_i2s_full()
+{
+    return CONFIG_I2S_BLOCK_COUNT-100 <= read_blocks;
 }
 
 static const struct i2s_driver_api i2s_litex_driver_api = {

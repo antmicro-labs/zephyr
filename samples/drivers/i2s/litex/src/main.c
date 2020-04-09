@@ -7,6 +7,7 @@
 #include <zephyr.h>
 #include <sys/printk.h>
 #include <drivers/i2s.h>
+#include <drivers/uart.h>
 #include <stdlib.h>
 #include <logging/log.h>
 #define AUDIO_SAMPLE_FREQ		(48000)
@@ -20,12 +21,13 @@
 #define AUDIO_FRAME_BUF_BYTES		\
 	(AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_BYTES)
 
-#define I2S_PLAY_BUF_COUNT		(6)
+#define I2S_PLAY_BUF_COUNT		(2100)
 #define I2S_TX_PRELOAD_BUF_COUNT	(2)
 
 
 static struct k_mem_slab i2s_mem_slab;
 static struct device *host_i2s_dev;
+static struct device *uart_dev;
 static char __aligned(32) audio_buffers[AUDIO_FRAME_BUF_BYTES][I2S_PLAY_BUF_COUNT];
 void main(void)
 {
@@ -35,7 +37,7 @@ void main(void)
     int ret;
 	
     host_i2s_dev = device_get_binding("i2s_rx");
-
+    uart_dev = device_get_binding("uart0");
 	k_mem_slab_init(&i2s_mem_slab, audio_buffers, AUDIO_FRAME_BUF_BYTES,
 			I2S_PLAY_BUF_COUNT);
 	if (!host_i2s_dev) 
@@ -66,28 +68,34 @@ void main(void)
 		printk("dmic_trigger failed with %d error", ret);
 		exit(-1);
 	}
+    // wait for buffer
+    while(is_i2s_full() == false) {
+        uart_poll_out(uart_dev,'r');
+        k_sleep(10);
+    }
+    // stop i2s transimsion
+    i2s_trigger(host_i2s_dev, I2S_DIR_RX, I2S_TRIGGER_STOP);
+    sys_write8(0xf, 0x82006000);
+    //send signal to ack python
+    uart_poll_out(uart_dev, 0x0);
 
     void*in_buf;
-    u32_t *buff_view = (u32_t*)in_buf;
-
     size_t size;
-    while(true)
+    for(int k =0; k< I2S_PLAY_BUF_COUNT-100; k++)
     {
+        // big endian
         ret = i2s_read(host_i2s_dev,&in_buf, &size);
-        printk("i2s_read stat: %i\n", ret);
-        printk("some bytes:%x \n", *((u32_t*)in_buf)+1);
-
-        if (ret != 0) {
-            printk("i2s timeout.\n");
-            k_sleep(K_SECONDS(2));
-            exit(-1);
+        for(int j =0; j < size*sizeof(u32_t); j++)
+        {
+            uart_poll_out(uart_dev, *(((u8_t*)in_buf)+j));
         }
         k_mem_slab_free(&i2s_mem_slab, &in_buf);
     }
-
-//	ret = i2s_trigger(host_i2s_dev, I2S_DIR_RX, I2S_TRIGGER_STOP);
-//	if (ret != 0) {
-//		printk("dmic_trigger failed with %d error", ret);
-//		exit(-1);
-//	}
+    // sending data done
+    sys_write8(0x0, 0x82006000);
+    // if my callculated something wrong, fill rest py buffer with 0x0
+    while(true)
+    {
+        uart_poll_out(uart_dev, 0x0);
+    }
 }
