@@ -215,11 +215,11 @@ static int i2s_get_fifo_depth(int reg)
  *
  * @return N/A
  */
-static void i2s_copy_from_fifo(u32_t *dst, size_t size)
+static void i2s_copy_from_fifo(u8_t *dst, size_t size)
 {
     for(size_t i =0; i < size; ++i)
     {
-       *(dst+i) = sys_read32(I2S_RX_FIFO_ADDR + i*FIFO_WORD_SIZE);
+       *(dst+i) = sys_read8(I2S_RX_FIFO_ADDR + i);
     }
 }
 
@@ -365,7 +365,7 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
     }
 
 	/* set I2S Data Format */
-	if (i2s_cfg->word_size != 32U) {
+	if (i2s_cfg->word_size != 24U) {
 		LOG_ERR("invalid word size.");
 		return -EINVAL;
     }
@@ -378,6 +378,8 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 	}
 
 	memcpy(&stream->cfg, i2s_cfg, sizeof(struct i2s_config));
+    // calc size for each operation
+    stream->mem_block_size = cfg->fifo_depth*FIFO_WORD_SIZE;
 	stream->state = I2S_STATE_READY;
     LOG_INF("I2S CONFIGURATION DONE");
 
@@ -508,7 +510,7 @@ static void i2s_litex_isr_rx(void * arg)
         //i2s_clear_pending_irq(cfg->base);
 		return;
 	}
-    i2s_copy_from_fifo((u32_t*)stream->mem_block, cfg->fifo_depth);
+    i2s_copy_from_fifo((u8_t*)stream->mem_block, 256*6);
     i2s_clear_pending_irq(cfg->base);
 	ret = queue_put(&stream->mem_block_queue, stream->mem_block,
 			stream->cfg.block_size);
@@ -524,7 +526,7 @@ static void i2s_litex_isr_tx(void * arg)
 	struct device *const dev = (struct device *) arg;
 	const struct i2s_litex_cfg *cfg = DEV_CFG(dev);
 	size_t mem_block_size;
-	struct stream *stream = &DEV_DATA(dev)->rx;
+	struct stream *stream = &DEV_DATA(dev)->tx;
 	int ret;
     
 	ret = queue_get(&stream->mem_block_queue, &stream->mem_block,
@@ -533,13 +535,13 @@ static void i2s_litex_isr_tx(void * arg)
 		return;
 	}
 	k_sem_give(&stream->sem);
-
     i2s_copy_to_fifo((u32_t*)stream->mem_block, cfg->fifo_depth);
     i2s_clear_pending_irq(cfg->base);
 }
+
 bool is_i2s_full()
 {
-    return CONFIG_I2S_BLOCK_COUNT-100 <= read_blocks;
+    return 500 <= read_blocks;
 }
 
 static const struct i2s_driver_api i2s_litex_driver_api = {

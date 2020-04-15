@@ -15,20 +15,19 @@
 #define AUDIO_NUM_CHANNELS		(2)
 #define AUDIO_SAMPLES_PER_FRAME		\
 	(AUDIO_SAMPLES_PER_CH_PER_FRAME * AUDIO_NUM_CHANNELS)
-#define AUDIO_SAMPLE_BYTES		(4)
-#define AUDIO_SAMPLE_BIT_WIDTH		(32)
+#define AUDIO_SAMPLE_BYTES		(6)
+#define AUDIO_SAMPLE_BIT_WIDTH		(24)
 
 #define AUDIO_FRAME_BUF_BYTES		\
 	(AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_BYTES)
 
 #define I2S_PLAY_BUF_COUNT		(2100)
-#define I2S_TX_PRELOAD_BUF_COUNT	(2)
 
 
 static struct k_mem_slab i2s_mem_slab;
 static struct device *host_i2s_dev;
 static struct device *uart_dev;
-static char __aligned(32) audio_buffers[AUDIO_FRAME_BUF_BYTES][I2S_PLAY_BUF_COUNT];
+static char __aligned(64) audio_buffers[AUDIO_FRAME_BUF_BYTES][I2S_PLAY_BUF_COUNT];
 void main(void)
 {
 	printk("Hello World! %s\n", CONFIG_BOARD);
@@ -81,7 +80,7 @@ void main(void)
 
     void*in_buf;
     size_t size;
-    for(int k =0; k< I2S_PLAY_BUF_COUNT-100; k++)
+    for(int k =0; k< 500; k++)
     {
         // big endian
         ret = i2s_read(host_i2s_dev,&in_buf, &size);
