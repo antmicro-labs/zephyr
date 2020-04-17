@@ -47,9 +47,8 @@ void main(void)
 	/* configure i2s for audio playback */
 	i2s_cfg.word_size = AUDIO_SAMPLE_BIT_WIDTH;
 	i2s_cfg.channels = AUDIO_NUM_CHANNELS;
-	i2s_cfg.format = I2S_FMT_DATA_FORMAT_LEFT_JUSTIFIED | I2S_FMT_CLK_NF_NB;
-	i2s_cfg.options = I2S_OPT_FRAME_CLK_SLAVE |
-		I2S_OPT_BIT_CLK_SLAVE;
+	i2s_cfg.format = I2S_FMT_DATA_FORMAT_MASK;
+	i2s_cfg.options = I2S_OPT_FRAME_CLK_SLAVE;
 	i2s_cfg.frame_clk_freq = AUDIO_SAMPLE_FREQ;
 	i2s_cfg.block_size = AUDIO_FRAME_BUF_BYTES;
 	i2s_cfg.mem_slab = &i2s_mem_slab;
@@ -84,7 +83,7 @@ void main(void)
     {
         // big endian
         ret = i2s_read(host_i2s_dev,&in_buf, &size);
-        for(int j =0; j < 256*4; j++)
+        for(int j =0; j < 256*3; j++)
         {
             uart_poll_out(uart_dev, *(((u8_t*)in_buf)+j));
         }
