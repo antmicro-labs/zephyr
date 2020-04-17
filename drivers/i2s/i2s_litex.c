@@ -456,14 +456,15 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 				    stream->state);
 			return -EIO;
 		}
-
 		__ASSERT_NO_MSG(stream->mem_block == NULL);
         i2s_reset_fifo(cfg->base);
-        // when using tx write some init data to fifo
-        // befor starting device
+        // when using tx module
+        // write some init data to fifo
         if(dir == I2S_DIR_TX)
         {
-           memset(((void*)I2S_TX_FIFO_ADDR),0xff, MAX_FIFO_DEPTH*FIFO_WORD_SIZE);
+           memset(((void*)I2S_TX_FIFO_ADDR),
+                   0xff, 
+                   MAX_FIFO_DEPTH*FIFO_WORD_SIZE);
         }
         i2s_enable(cfg->base);
         i2s_irq_enable(cfg->base, I2S_EV_READY);       
@@ -471,6 +472,7 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 
         stream->state = I2S_STATE_RUNNING;
 		break;
+
 	case I2S_TRIGGER_STOP:
 		if (stream->state != I2S_STATE_RUNNING) {
 			LOG_ERR("STOP trigger: invalid state");
@@ -490,26 +492,28 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 	return 0;
 }
 
-static int read_blocks = 0;
 static void i2s_litex_isr_rx(void * arg)
 {
 	struct device *const dev = (struct device *) arg;
 	const struct i2s_litex_cfg *cfg = DEV_CFG(dev);
 	struct stream *stream = &DEV_DATA(dev)->rx;
-	int ret;
+	int ret, trash;
 	/* Prepare to receive the next data block */
 	ret = k_mem_slab_alloc(stream->cfg.mem_slab, &stream->mem_block,
 			       K_NO_WAIT);
-	if (ret < 0) {
-        //i2s_copy_from_fifo(trash, cfg->fifo_depth);
-        //i2s_clear_pending_irq(cfg->base);
+	if (ret < 0){
+        // if no space avaliable just clean irq
+        for(int i=0;i <cfg->fifo_depth;i++)
+        {
+            sys_read32(I2S_RX_FIFO_ADDR + i*FIFO_WORD_SIZE);
+        }
+        i2s_clear_pending_irq(cfg->base);
 		return;
 	}
     i2s_copy_from_fifo((u8_t*)stream->mem_block, cfg->fifo_depth, stream->cfg.word_size);
     i2s_clear_pending_irq(cfg->base);
 	ret = queue_put(&stream->mem_block_queue, stream->mem_block,
 			stream->cfg.block_size);
-	read_blocks++;
     if (ret < 0) {
 		return;
 	}
@@ -526,7 +530,8 @@ static void i2s_litex_isr_tx(void * arg)
     
 	ret = queue_get(&stream->mem_block_queue, &stream->mem_block,
 			&mem_block_size);
-	if (ret < 0) {
+	if (ret < 0) 
+    {
 		return;
 	}
 
@@ -535,17 +540,13 @@ static void i2s_litex_isr_tx(void * arg)
     i2s_clear_pending_irq(cfg->base);
 }
 
-bool is_i2s_full()
-{
-    return 500 <= read_blocks;
-}
-
 static const struct i2s_driver_api i2s_litex_driver_api = {
 	.configure = i2s_litex_configure,
 	.read = i2s_litex_read,
 	.write = i2s_litex_write,
 	.trigger = i2s_litex_trigger,
 };
+
 #define I2S_INIT(n,dir) \
 \
 struct queue_item rx_##n##_ring_buf[CONFIG_I2S_BLOCK_COUNT+ 1];\

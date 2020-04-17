@@ -645,7 +645,6 @@ static inline void z_impl_uart_poll_out(struct device *dev,
 	api->poll_out(dev, out_char);
 }
 
-bool is_i2s_full();
 /**
  * @brief Set UART configuration.
  *
