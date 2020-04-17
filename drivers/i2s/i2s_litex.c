@@ -215,11 +215,11 @@ static int i2s_get_fifo_depth(int reg)
  *
  * @return N/A
  */
-static void i2s_copy_from_fifo(u8_t *dst, size_t size)
+static void i2s_copy_from_fifo(u32_t *dst, size_t size)
 {
     for(size_t i =0; i < size; ++i)
     {
-       *(dst+i) = sys_read8(I2S_RX_FIFO_ADDR + i);
+       *(dst+i) = sys_read32(I2S_RX_FIFO_ADDR + i*FIFO_WORD_SIZE);
     }
 }
 
@@ -510,7 +510,7 @@ static void i2s_litex_isr_rx(void * arg)
         //i2s_clear_pending_irq(cfg->base);
 		return;
 	}
-    i2s_copy_from_fifo((u8_t*)stream->mem_block, 256*6);
+    i2s_copy_from_fifo((u32_t*)stream->mem_block, 256);
     i2s_clear_pending_irq(cfg->base);
 	ret = queue_put(&stream->mem_block_queue, stream->mem_block,
 			stream->cfg.block_size);

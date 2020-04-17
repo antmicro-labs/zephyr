@@ -46,7 +46,7 @@
 
 #define MAX_FIFO_DEPTH 512
 // size in bytes for each word in fifo eg left + right channel
-#define FIFO_WORD_SIZE 6
+#define FIFO_WORD_SIZE 4
 // i2s rx 
 #define I2S_RX_BASE_ADDR DT_INST_0_LITEX_I2S_BASE_ADDRESS_0
 #define I2S_RX_EV_STATUS_REG  (I2S_RX_BASE_ADDR + I2S_EV_STATUS_REG_OFFSET)

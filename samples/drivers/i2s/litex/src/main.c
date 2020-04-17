@@ -15,7 +15,7 @@
 #define AUDIO_NUM_CHANNELS		(2)
 #define AUDIO_SAMPLES_PER_FRAME		\
 	(AUDIO_SAMPLES_PER_CH_PER_FRAME * AUDIO_NUM_CHANNELS)
-#define AUDIO_SAMPLE_BYTES		(6)
+#define AUDIO_SAMPLE_BYTES		(8)
 #define AUDIO_SAMPLE_BIT_WIDTH		(24)
 
 #define AUDIO_FRAME_BUF_BYTES		\
@@ -27,7 +27,7 @@
 static struct k_mem_slab i2s_mem_slab;
 static struct device *host_i2s_dev;
 static struct device *uart_dev;
-static char __aligned(64) audio_buffers[AUDIO_FRAME_BUF_BYTES][I2S_PLAY_BUF_COUNT];
+static char audio_buffers[AUDIO_FRAME_BUF_BYTES*I2S_PLAY_BUF_COUNT];
 void main(void)
 {
 	printk("Hello World! %s\n", CONFIG_BOARD);
@@ -68,7 +68,7 @@ void main(void)
 		exit(-1);
 	}
     // wait for buffer
-    while(is_i2s_full() == false) {
+    while(is_i2s_full() == false){
         uart_poll_out(uart_dev,'r');
         k_sleep(10);
     }
@@ -84,7 +84,7 @@ void main(void)
     {
         // big endian
         ret = i2s_read(host_i2s_dev,&in_buf, &size);
-        for(int j =0; j < size*sizeof(u32_t); j++)
+        for(int j =0; j < 256*4; j++)
         {
             uart_poll_out(uart_dev, *(((u8_t*)in_buf)+j));
         }
