@@ -361,13 +361,13 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
     if(i2s_cfg->block_size < req_buf_s)
     {
         LOG_ERR("not enought space to allocate signle buffer");
-        LOG_ERR("Fifo requiresat least %i bytes", req_buf_s);
+        LOG_ERR("Fifo requires at least %i bytes", req_buf_s);
         return -EINVAL;
     }else if(i2s_cfg->block_size != req_buf_s)
     {
-        LOG_INF("caustion, you buffer is greater than required. Only %i bytes of buffer will be filled by driver", req_buf_s);
+        LOG_INF("you buffer is greater than required, only %i bytes of data are valid", req_buf_s);
+        i2s_cfg->block_size = req_buf_s;
     }
-
 	/* set I2S Data Format */
 	if (i2s_cfg->word_size != 24U) {
 		LOG_ERR("invalid word size.");
@@ -396,13 +396,11 @@ static int i2s_litex_read(struct device *dev, void **mem_block, size_t *size)
 		LOG_DBG("invalid state");
 		return -ENOMEM;
 	}
-
-   	if (dev_data->rx.state != I2S_STATE_ERROR) {
-   		ret = k_sem_take(&dev_data->rx.sem, dev_data->rx.cfg.timeout);
-   		if (ret < 0) {
-   			return ret;
-   		}
-   	}
+    ret = k_sem_take(&dev_data->rx.sem, dev_data->rx.cfg.timeout);
+    if (ret < 0) 
+    {
+        return ret;
+    }
 	/* Get data from the beginning of RX queue */
 	ret = queue_get(&dev_data->rx.mem_block_queue, mem_block, size);
 	if (ret < 0) {
@@ -488,8 +486,16 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 		LOG_ERR("Unsupported trigger command");
 		return -EINVAL;
 	}
-
 	return 0;
+}
+
+static inline void clean_buff(const struct i2s_litex_cfg *cfg)
+{
+    for(int i=0;i <cfg->fifo_depth;i++)
+    {
+        sys_read32(I2S_RX_FIFO_ADDR + i*FIFO_WORD_SIZE);
+    }
+    i2s_clear_pending_irq(cfg->base);
 }
 
 static void i2s_litex_isr_rx(void * arg)
@@ -497,21 +503,21 @@ static void i2s_litex_isr_rx(void * arg)
 	struct device *const dev = (struct device *) arg;
 	const struct i2s_litex_cfg *cfg = DEV_CFG(dev);
 	struct stream *stream = &DEV_DATA(dev)->rx;
-	int ret, trash;
+	int ret;
 	/* Prepare to receive the next data block */
 	ret = k_mem_slab_alloc(stream->cfg.mem_slab, &stream->mem_block,
 			       K_NO_WAIT);
 	if (ret < 0){
         // if no space avaliable just clean irq
-        for(int i=0;i <cfg->fifo_depth;i++)
-        {
-            sys_read32(I2S_RX_FIFO_ADDR + i*FIFO_WORD_SIZE);
-        }
-        i2s_clear_pending_irq(cfg->base);
+        // probably error should be reported somehow
+        clean_buff(cfg);
 		return;
 	}
-    i2s_copy_from_fifo((u8_t*)stream->mem_block, cfg->fifo_depth, stream->cfg.word_size);
+    i2s_copy_from_fifo((u8_t*)stream->mem_block,
+            cfg->fifo_depth,
+            stream->cfg.word_size);
     i2s_clear_pending_irq(cfg->base);
+
 	ret = queue_put(&stream->mem_block_queue, stream->mem_block,
 			stream->cfg.block_size);
     if (ret < 0) {
