@@ -18,7 +18,7 @@ LOG_MODULE_REGISTER(i2s_litex);
 	((struct i2s_litex_data*const)(dev)->driver_data)
 
 #define MODULO_INC(val, max) { val = (++val < max) ? val : 0; }
-#define CONFIG_I2S_BLOCK_COUNT 2100
+
 /**
  * @brief Enable RX device
  *
@@ -106,20 +106,6 @@ static void i2s_clear_pending_irq(int reg)
 	u8_t reg_data = litex_read8(reg + I2S_EV_PENDING_REG_OFFSET);
 
 	sys_write8(reg_data, reg + I2S_EV_PENDING_REG_OFFSET);
-}
-
-/**
- * @brief Get i2s overflow status 
- *
- * @param reg base register of device
- *
- * @return bool true if overflow occured, false otherwise
- */
-static bool i2s_is_overflow(int reg)
-{
-    u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
-    
-    return (status_reg & I2S_STAT_OVERFLOW_MASK);
 }
 
 /**
@@ -221,7 +207,7 @@ static void i2s_copy_from_fifo(u8_t *dst, size_t size, int channel_bits)
     int max_off = channel_bits/8-1;
     for(size_t i =0; i < size; ++i)
     {
-        data = sys_read32(I2S_RX_FIFO_ADDR + i*FIFO_WORD_SIZE);
+        data = sys_read32(I2S_RX_FIFO_ADDR + i*CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
         for(int off = max_off; off >= 0; off--)
         {
             *(dst + i*3 + off) = data >> 8*off;
@@ -243,7 +229,7 @@ static void i2s_copy_to_fifo(u32_t *src, size_t size)
 {
     for(size_t i =0; i < size; ++i)
     {
-        sys_write32(*(src+i),I2S_TX_FIFO_ADDR + i*FIFO_WORD_SIZE);
+        sys_write32(*(src+i),I2S_TX_FIFO_ADDR + i*CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
     }
 }
 
@@ -261,9 +247,8 @@ static int queue_get(struct ring_buf *rb, void **mem_block, size_t *size)
 		irq_unlock(key);
 		return -ENOMEM;
 	}
-
-	*mem_block = rb->buf[rb->tail].mem_block;
-	*size = rb->buf[rb->tail].size;
+	*mem_block = rb->buf[0].mem_block;
+	*size = rb->buf[0].size;
 	MODULO_INC(rb->tail, rb->len);
 
 	irq_unlock(key);
@@ -301,7 +286,6 @@ static void debug_registers(int reg)
 {
     LOG_INF("Reading i2s CTR 0x%x", litex_read8(reg + I2S_CONTROL_REG_OFFSET));
     LOG_INF("Reading i2s EV_PE 0x%x",litex_read8(reg + I2S_EV_PENDING_REG_OFFSET));
-    LOG_INF("Overflow status 0x%x", i2s_is_overflow(reg));
     LOG_INF("Underflow status 0x%x", i2s_is_underflow(reg));
     LOG_INF("Is empty 0x%x", i2s_is_empty(reg));
     LOG_INF("Is ready 0x%x", i2s_is_dataready(reg));
@@ -315,9 +299,8 @@ static int i2s_litex_initialize(struct device *dev)
 	struct i2s_litex_cfg *cfg = DEV_CFG(dev);
 	struct i2s_litex_data *const dev_data =DEV_DATA(dev);
     cfg->irq_config(dev);
-	k_sem_init(&dev_data->rx.sem, 0, CONFIG_I2S_BLOCK_COUNT);
+	k_sem_init(&dev_data->rx.sem, 0, CONFIG_I2S_LITEX_RX_BLOCK_COUNT);
 
-	LOG_INF("%s inited %x", dev->config->name, cfg->fifo_depth);
 	return 0;
 }
 
@@ -325,7 +308,6 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 			       struct i2s_config *i2s_cfg)
 {
 
-	LOG_INF("i2s conigure function invoked");
 	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
 	const struct i2s_litex_cfg *const cfg = DEV_CFG(dev);
     struct stream *stream;
@@ -462,7 +444,7 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
         {
            memset(((void*)I2S_TX_FIFO_ADDR),
                    0xff, 
-                   MAX_FIFO_DEPTH*FIFO_WORD_SIZE);
+                   CONFIG_I2S_LITEX_FIFO_MAX_DEPTH*CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
         }
         i2s_enable(cfg->base);
         i2s_irq_enable(cfg->base, I2S_EV_READY);       
@@ -493,7 +475,7 @@ static inline void clean_buff(const struct i2s_litex_cfg *cfg)
 {
     for(int i=0;i <cfg->fifo_depth;i++)
     {
-        sys_read32(I2S_RX_FIFO_ADDR + i*FIFO_WORD_SIZE);
+        sys_read32(I2S_RX_FIFO_ADDR + i*CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
     }
     i2s_clear_pending_irq(cfg->base);
 }
@@ -504,6 +486,7 @@ static void i2s_litex_isr_rx(void * arg)
 	const struct i2s_litex_cfg *cfg = DEV_CFG(dev);
 	struct stream *stream = &DEV_DATA(dev)->rx;
 	int ret;
+
 	/* Prepare to receive the next data block */
 	ret = k_mem_slab_alloc(stream->cfg.mem_slab, &stream->mem_block,
 			       K_NO_WAIT);
@@ -523,9 +506,9 @@ static void i2s_litex_isr_rx(void * arg)
     if (ret < 0) {
 		return;
 	}
+
 	k_sem_give(&stream->sem);
 }
-
 static void i2s_litex_isr_tx(void * arg)
 {
 	struct device *const dev = (struct device *) arg;
@@ -533,7 +516,7 @@ static void i2s_litex_isr_tx(void * arg)
 	size_t mem_block_size;
 	struct stream *stream = &DEV_DATA(dev)->tx;
 	int ret;
-    
+
 	ret = queue_get(&stream->mem_block_queue, &stream->mem_block,
 			&mem_block_size);
 	if (ret < 0) 
@@ -555,12 +538,12 @@ static const struct i2s_driver_api i2s_litex_driver_api = {
 
 #define I2S_INIT(n,dir) \
 \
-struct queue_item rx_##n##_ring_buf[CONFIG_I2S_BLOCK_COUNT+ 1];\
-struct queue_item tx_##n##_ring_buf[CONFIG_I2S_BLOCK_COUNT+ 1];\
+struct queue_item rx_##n##_ring_buf[CONFIG_I2S_LITEX_RX_BLOCK_COUNT+ 1];\
+struct queue_item tx_##n##_ring_buf[CONFIG_I2S_LITEX_RX_BLOCK_COUNT+ 1];\
 \
 static struct i2s_litex_data i2s_litex_data_##n = { \
   .dir.mem_block_queue.buf = dir##_##n##_ring_buf,        \
-  .dir.mem_block_queue.len = CONFIG_I2S_BLOCK_COUNT+1,    \
+  .dir.mem_block_queue.len = CONFIG_I2S_LITEX_RX_BLOCK_COUNT+1,    \
   .dir.mem_block_queue.head = 0, \
   .dir.mem_block_queue.tail = 0, \
 }; \
