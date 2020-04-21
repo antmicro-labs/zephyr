@@ -8,7 +8,7 @@ menuconfig I2S_LITEX
 	bool "Litex I2S driver"
 	depends on SOC_RISCV32_LITEX_VEXRISCV
 	help
-	  Enable Litex Inter Sound (I2S) bus driver. 
+		Enable Litex Inter Sound (I2S) bus driver. 
 
 if I2S_LITEX
 
