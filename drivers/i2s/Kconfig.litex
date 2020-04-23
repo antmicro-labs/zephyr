@@ -8,4 +8,19 @@ menuconfig I2S_LITEX
 	bool "Litex I2S driver"
 	depends on SOC_RISCV32_LITEX_VEXRISCV
 	help
-	  Enable Litex Inter Sound (I2S) bus driver. 
+		Enable Litex Inter Sound (I2S) bus driver. 
+
+if I2S_LITEX
+
+config I2S_LITEX_RX_BLOCK_COUNT
+	int "RX queue length"
+	default 500
+
+config I2S_LITEX_FIFO_WORD_SIZE
+	int "I2S fifo received sample size"
+	default 4
+
+config I2S_LITEX_FIFO_MAX_DEPTH
+	int "I2S fifo max depth"
+	default 512
+endif
