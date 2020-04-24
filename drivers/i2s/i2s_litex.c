@@ -258,16 +258,16 @@ static void i2s_copy_to_fifo(u8_t *src, size_t size, int channel_bits)
 {
 	int chan_size = channel_bits / 8;
 	int max_off = chan_size - 1;
-	u32_t data =0xffffffff;
+	u32_t data;
+	u8_t *d_ptr = (u8_t*)&data;
 	for (size_t i = 0; i < size; ++i) {
-	
-		//	for (int off = max_off; off >= 0; off--) {
-	//		data |= *(src + i*chan_size + off) << 8*off;
-	//	}
+		for (int off = max_off; off >= 0; off--) {
+			*(d_ptr+off) = *(src + i*chan_size + (max_off -off));
+		}
 		sys_write32(data,
 			    I2S_TX_FIFO_ADDR +
 				    i*CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
-//		data=0;
+		data=0;
 	}
 }
 
@@ -505,7 +505,7 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 	return 0;
 }
 
-static inline void clean_buff(const struct i2s_litex_cfg *cfg)
+static inline void clean_rx_fifo(const struct i2s_litex_cfg *cfg)
 {
 	for (int i = 0; i < cfg->fifo_depth; i++) {
 		sys_read32(I2S_RX_FIFO_ADDR +
@@ -527,7 +527,7 @@ static void i2s_litex_isr_rx(void *arg)
 	if (ret < 0) {
 		// if no space avaliable just clean irq
 		// probably error should be reported somehow
-		clean_buff(cfg);
+		clean_rx_fifo(cfg);
 		return;
 	}
 	i2s_copy_from_fifo((u8_t *)stream->mem_block, cfg->fifo_depth,
@@ -543,7 +543,15 @@ static void i2s_litex_isr_rx(void *arg)
 	k_sem_give(&stream->sem);
 }
 
-int asdf = 0;
+static inline void clean_tx_fifo(const struct i2s_litex_cfg *cfg)
+{
+	for (int i = 0; i < cfg->fifo_depth; i++) {
+		sys_write32(0x0,I2S_TX_FIFO_ADDR +
+			   i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
+	}
+	i2s_clear_pending_irq(cfg->base);
+}
+
 static void i2s_litex_isr_tx(void *arg)
 {
 	struct device *const dev = (struct device *)arg;
@@ -551,15 +559,11 @@ static void i2s_litex_isr_tx(void *arg)
 	size_t mem_block_size;
 	struct stream *stream = &DEV_DATA(dev)->tx;
 	int ret;
-	if(asdf > 1000)
-		sys_write8(0xf, 0x82006000);
-	asdf++;
 	ret = queue_get(&stream->mem_block_queue, &stream->mem_block,
 			&mem_block_size);
 	if (ret < 0) {
         //TODO  implement error handling, when no data avaliable
-        memset(((void*)I2S_TX_FIFO_ADDR),0x10, 256*3);
-        i2s_clear_pending_irq(cfg->base);
+		clean_tx_fifo(cfg);
 		return;
 	}
 	k_sem_give(&stream->sem);
