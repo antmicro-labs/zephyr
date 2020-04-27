@@ -262,7 +262,7 @@ static void i2s_copy_to_fifo(u8_t *src, size_t size, int channel_bits)
 	u8_t *d_ptr = (u8_t*)&data;
 	for (size_t i = 0; i < size; ++i) {
 		for (int off = max_off; off >= 0; off--) {
-			*(d_ptr+off) = *(src + i*chan_size + (max_off -off));
+			*(d_ptr+off) = *(src + i*chan_size + off);
 		}
 		sys_write32(data,
 			    I2S_TX_FIFO_ADDR +
