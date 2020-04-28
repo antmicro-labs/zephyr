@@ -250,7 +250,7 @@ static void i2s_copy_from_fifo(u8_t *dst, size_t size, int channel_bits)
  * This function copies data from user buffer into fifo
  *
  * @param src memory from which data will be copied to fifo.
- * @param size amount of data to be copied
+ * @param size amount of data to be copied in bytes
  *
  * @return N/A
  */

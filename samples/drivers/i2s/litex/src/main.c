@@ -20,7 +20,7 @@
 
 #define AUDIO_FRAME_BUF_BYTES (AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_BYTES)
 
-#define I2S_PLAY_BUF_COUNT (1000)
+#define I2S_PLAY_BUF_COUNT (10000)
 
 static struct device *host_i2s_rx_dev;
 static struct device *host_i2s_tx_dev;
@@ -38,15 +38,17 @@ void main(void)
 	struct i2s_config i2s_rx_cfg;
 	struct i2s_config i2s_tx_cfg;
 	int ret;
-	// wait a while
-	k_sleep(K_SECONDS(6));
+	// wait for a while, cause something reset registers
+	k_sleep(K_SECONDS(5));
 
+	// wait for sync signal,
+	// then start recording 
+	// uart_poll_in(uart_dev, 0x0);
 	host_i2s_rx_dev = device_get_binding("i2s_rx");
 	if (!host_i2s_rx_dev) {
 		printk("unable to find i2s_rx device");
 		exit(-1);
 	}
-
 	k_mem_slab_init(&i2s_rx_mem_slab, audio_buffers, AUDIO_FRAME_BUF_BYTES,
 			I2S_PLAY_BUF_COUNT);
 
@@ -71,6 +73,7 @@ void main(void)
 		printk("i2s_trigger failed with %d error", ret);
 		exit(-1);
 	}
+
 	/* receive data */
 	void *mem_block;
 	size_t size, tot_size = 0;
@@ -86,16 +89,9 @@ void main(void)
 		printk("i2s_trigger failed with %d error", ret);
 		exit(-1);
 	}
-	// this part of code is not related to i2s driver
-	// it's just for debug purpose, but you can find here how to extract data
-	// send signal to ack python
-	
-	uart_poll_out(uart_dev, 0x0);
-	for (int j = 0; j < tot_size; j++) {
-		uart_poll_out(uart_dev, *(((u8_t *)user_buffer) + j));
-	}
 
-	//signal tx starting part
+	//signal begining of tx part
+	//all leds up
 	sys_write8(0xf, 0x82006000);
 
 	host_i2s_tx_dev = device_get_binding("i2s_tx");
@@ -105,7 +101,6 @@ void main(void)
 	}
 	k_mem_slab_init(&i2s_tx_mem_slab, audio_buffers, AUDIO_FRAME_BUF_BYTES,
 			I2S_PLAY_BUF_COUNT);
-
 
 	/* configure i2s for audio playback */
 	i2s_tx_cfg.word_size = AUDIO_SAMPLE_BIT_WIDTH;
@@ -128,10 +123,11 @@ void main(void)
 		printk("i2s_trigger failed with %d error", ret);
 		exit(-1);
 	}
+
 	while(true){
 		for (int j = 0; j <I2S_PLAY_BUF_COUNT ; j++) 
 		{
-			ret = i2s_write(host_i2s_tx_dev, user_buffer + AUDIO_FRAME_BUF_BYTES*j, AUDIO_FRAME_BUF_BYTES);
+			ret = i2s_write(host_i2s_tx_dev, user_buffer + AUDIO_FRAME_BUF_BYTES*j, AUDIO_SAMPLES_PER_FRAME);
 		}
 	}
 }
