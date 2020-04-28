@@ -285,8 +285,8 @@ static int queue_get(struct ring_buf *rb, void **mem_block, size_t *size)
 		irq_unlock(key);
 		return -ENOMEM;
 	}
-	*mem_block = rb->buf[0].mem_block;
-	*size = rb->buf[0].size;
+	*mem_block = rb->buf[rb->tail].mem_block;
+	*size = rb->buf[rb->tail].size;
 	MODULO_INC(rb->tail, rb->len);
 
 	irq_unlock(key);
