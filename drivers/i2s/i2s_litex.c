@@ -110,117 +110,6 @@ static void i2s_clear_pending_irq(int reg)
 }
 
 /**
- * @brief Get i2s underflow status 
- *
- * @param reg base register of device
- *
- * @return bool true if underflow occured, false otherwise
- */
-static bool i2s_is_underflow(int reg)
-{
-	u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
-
-	return (status_reg & I2S_STAT_UNDERFLOW_MASK);
-}
-
-/**
- * @brief Get i2s dataready status 
- *
- * @param reg base register of device
- *
- * @return bool true if data is ready to read, false otherwise
- */
-static bool i2s_rx_is_dataready(int reg)
-{
-    u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
-    
-    return (status_reg & I2S_RX_STAT_DATAREADY_MASK);
-}
-
-/**
- * @brief Get i2s empty status 
- *
- * @param reg base register of device
- *
- * @return bool true if fifo empty false otherwise
- */
-static bool i2s_rx_is_empty(int reg)
-{
-    u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
-        
-    return (status_reg & I2S_RX_STAT_EMPTY_MASK) >> I2S_TX_STAT_FREE_OFFSET;
-}
-
-/**
- * @brief Check if i2s tx buffe is empty 
- *
- * @param reg base register of device
- *
- * @return bool true if data is ready to read, false otherwise
- */
-static bool i2s_tx_is_free(int reg)
-{
-    u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
-    
-    return (status_reg & I2S_TX_STAT_FREE_MASK);
-}
-
-/**
- * @brief Get i2s empty status 
- *
- * @param reg base register of device
- *
- * @return bool true if fifo empty false otherwise
- */
-static bool i2s_tx_is_almostfull(int reg)
-{
-    u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
-    
-    return (status_reg & I2S_TX_STAT_ALMOSTFULL_MASK);
-}
-
-/**
- * @brief Get i2s wrcount info 
- *
- * @param reg base register of device
- *
- * @return u32_t return amount of data ready to write
- */
-static u32_t i2s_get_wrcount(int reg, int off, int mask)
-{
-    u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
-    
-    return (status_reg & mask) >> off;
-}
-
-/**
- * @brief Get i2s rdcount info 
- *
- * @param reg base register of device
- *
- * @return u32_t return amount of data ready to read
- */
-static u32_t i2s_get_rdcount(int reg, int off, int mask)
-{
-    u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
-    
-    return (status_reg & mask) >> off;
-}
-/**
- * @brief Return FIFO depth defined by i2s driver 
- *
- * @param dev base register of device
- *
- * @return int fifo_depth
- */
-static int i2s_rx_get_fifo_depth(int reg)
-{
-    u32_t status_reg = litex_read32(reg + I2S_STATUS_REG_OFFSET);
-    
-    return ((status_reg & I2S_RX_STAT_FIFO_DEPTH_MASK) >> I2S_RX_STAT_FIFO_DEPTH_OFFSET);
-}
-
-/**
  * @brief fast data copy function, 
  * each operation copies 32 bit data chunks
  * This function copies data from fifo into user buffer
@@ -260,7 +149,7 @@ static void i2s_copy_to_fifo(u8_t *src, size_t size, int channel_bits)
 	int max_off = chan_size - 1;
 	u32_t data;
 	u8_t *d_ptr = (u8_t*)&data;
-	for (size_t i = 0; i < size; ++i) {
+	for (size_t i = 0; i < size/chan_size; ++i) {
 		for (int off = max_off; off >= 0; off--) {
 			*(d_ptr+off) = *(src + i*chan_size + off);
 		}
@@ -318,18 +207,6 @@ static int queue_put(struct ring_buf *rb, void *mem_block, size_t size)
 
 	irq_unlock(key);
 	return 0;
-}
-
-static void debug_registers(int reg)
-{
-    LOG_INF("Reading i2s CTR 0x%x", litex_read8(reg + I2S_CONTROL_REG_OFFSET));
-    LOG_INF("Reading i2s EV_PE 0x%x",litex_read8(reg + I2S_EV_PENDING_REG_OFFSET));
-    LOG_INF("Underflow status 0x%x", i2s_is_underflow(reg));
-    LOG_INF("Is empty 0x%x", i2s_rx_is_empty(reg));
-    LOG_INF("Is ready 0x%x", i2s_rx_is_dataready(reg));
-    LOG_INF("Write count 0x%x", i2s_get_wrcount(reg, I2S_RX_STAT_WRCOUNT_OFFSET, I2S_RX_STAT_WRCOUNT_MASK));
-    LOG_INF("Read count 0x%x",i2s_get_rdcount(reg, I2S_RX_STAT_RDCOUNT_OFFSET, I2S_RX_STAT_RDCOUNT_MASK) );
-    LOG_INF("fifo size 0x%x",i2s_rx_get_fifo_depth(reg));
 }
 
 static int i2s_litex_initialize(struct device *dev)
@@ -562,7 +439,8 @@ static void i2s_litex_isr_tx(void *arg)
 	ret = queue_get(&stream->mem_block_queue, &stream->mem_block,
 			&mem_block_size);
 	if (ret < 0) {
-        //TODO  implement error handling, when no data avaliable
+        //TODO  implement error handling, 
+		//when no data avaliable
 		clean_tx_fifo(cfg);
 		return;
 	}
