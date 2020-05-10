@@ -7,12 +7,9 @@
 #include "tp.h"
 
 #define is(_a, _b) (strcmp((_a), (_b)) == 0)
-#define is_timer_subscribed(_t) (k_timer_remaining_get(_t))
 
 #define th_seq(_x) ntohl((_x)->th_seq)
 #define th_ack(_x) ntohl((_x)->th_ack)
-#define ip_get(_x) ((struct net_ipv4_hdr *) net_pkt_ip_data((_x)))
-#define ip6_get(_x) ((struct net_ipv6_hdr *) net_pkt_ip_data((_x)))
 
 #define tcp_slist(_slist, _op, _type, _link)				\
 ({									\
@@ -36,28 +33,27 @@
 #endif
 
 #if IS_ENABLED(CONFIG_NET_TEST_PROTOCOL)
-#define tcp_pkt_alloc(_len) tp_pkt_alloc(_len, tp_basename(__FILE__), __LINE__)
+#define tcp_pkt_alloc(_conn, _len)					\
+({									\
+	sa_family_t _family = net_context_get_family((_conn)->context);	\
+	struct net_pkt *_pkt = net_pkt_alloc_with_buffer((_conn)->iface,\
+							 (_len),	\
+							 _family,	\
+							 IPPROTO_TCP,	\
+							 K_NO_WAIT);	\
+									\
+	tp_pkt_alloc(_pkt, tp_basename(__FILE__), __LINE__);		\
+									\
+	_pkt;								\
+})
 #define tcp_pkt_clone(_pkt) tp_pkt_clone(_pkt, tp_basename(__FILE__), __LINE__)
 #define tcp_pkt_unref(_pkt) tp_pkt_unref(_pkt, tp_basename(__FILE__), __LINE__)
 #else
-static struct net_pkt *tcp_pkt_alloc(size_t len)
-{
-	struct net_pkt *pkt = net_pkt_alloc(K_NO_WAIT);
+#define tcp_pkt_alloc(_conn, _len)					\
+	net_pkt_alloc_with_buffer((_conn)->iface, (_len),		\
+				  net_context_get_family((_conn)->context), \
+				  IPPROTO_TCP, K_NO_WAIT)
 
-	pkt->family = AF_INET;
-
-	NET_ASSERT(pkt);
-
-	if (len) {
-		struct net_buf *buf = net_pkt_get_frag(pkt, K_NO_WAIT);
-
-		net_buf_add(buf, len);
-		net_pkt_frag_insert(pkt, buf);
-		NET_ASSERT(buf);
-	}
-
-	return pkt;
-}
 #define tcp_pkt_clone(_pkt) net_pkt_clone(_pkt, K_NO_WAIT)
 #define tcp_pkt_unref(_pkt) net_pkt_unref(_pkt)
 #endif
@@ -83,14 +79,14 @@ static struct net_pkt *tcp_pkt_alloc(size_t len)
 	(_conn)->state = _s;						\
 })
 
-#define TCPOPT_PAD	0
+#define TCPOPT_END	0
 #define TCPOPT_NOP	1
 #define TCPOPT_MAXSEG	2
 #define TCPOPT_WINDOW	3
 
 enum pkt_addr {
-	SRC = 1,
-	DST = 0
+	TCP_EP_SRC = 1,
+	TCP_EP_DST = 0
 };
 
 struct tcphdr {
@@ -126,18 +122,13 @@ enum tcp_state {
 	TCP_SYN_SENT,
 	TCP_SYN_RECEIVED,
 	TCP_ESTABLISHED,
-	TCP_FIN_WAIT1,
-	TCP_FIN_WAIT2,
+	TCP_FIN_WAIT_1,
+	TCP_FIN_WAIT_2,
 	TCP_CLOSE_WAIT,
 	TCP_CLOSING,
 	TCP_LAST_ACK,
 	TCP_TIME_WAIT,
 	TCP_CLOSED
-};
-
-struct tcp_win { /* TCP window */
-	size_t len;
-	sys_slist_t bufs;
 };
 
 union tcp_endpoint {
@@ -146,27 +137,33 @@ union tcp_endpoint {
 	struct sockaddr_in6 sin6;
 };
 
+struct tcp_options {
+	u16_t mss;
+	u16_t window;
+	bool mss_found : 1;
+	bool wnd_found : 1;
+};
+
 struct tcp { /* TCP connection */
 	sys_snode_t next;
 	struct net_context *context;
+	struct k_mutex lock;
 	void *recv_user_data;
 	enum tcp_state state;
 	u32_t seq;
 	u32_t ack;
-	union tcp_endpoint *src;
-	union tcp_endpoint *dst;
+	union tcp_endpoint src;
+	union tcp_endpoint dst;
 	u16_t win;
-	struct tcp_win *rcv;
-	struct tcp_win *snd;
-	struct k_timer send_timer;
+	struct tcp_options recv_options;
+	struct k_delayed_work send_timer;
 	sys_slist_t send_queue;
 	bool in_retransmission;
 	size_t send_retries;
+	struct k_delayed_work timewait_timer;
 	struct net_if *iface;
 	net_tcp_accept_cb_t accept_cb;
 	atomic_t ref_count;
-	sys_slist_t rsv_bufs;
-	size_t rsv_bytes;
 };
 
 #define _flags(_fl, _op, _mask, _cond)					\
@@ -183,39 +180,3 @@ struct tcp { /* TCP connection */
 
 #define FL(_fl, _op, _mask, _args...)					\
 	_flags(_fl, _op, _mask, strlen("" #_args) ? _args : true)
-
-
-extern struct net_buf_pool tcp_nbufs;
-
-#if IS_ENABLED(CONFIG_NET_TEST_PROTOCOL)
-#define tcp_nbuf_alloc(_conn, _len) \
-	tp_nbuf_alloc(&tcp_nbufs, _len, tp_basename(__FILE__), \
-			__LINE__, __func__)
-
-#define tcp_nbuf_clone(_buf) \
-	tp_nbuf_clone((_buf), tp_basename(__FILE__), __LINE__, __func__)
-
-#define tcp_nbuf_unref(_nbuf) \
-	tp_nbuf_unref(_nbuf, tp_basename(__FILE__), __LINE__, __func__)
-#else
-static struct net_buf *tcp_nbuf_alloc(struct tcp *conn, size_t len)
-{
-	struct net_buf *buf;
-
-	if (conn->rsv_bytes >= len) {
-		buf = tcp_slist(&conn->rsv_bufs, get, struct net_buf, node);
-		conn->rsv_bytes -= buf->size;
-	} else {
-		buf = net_buf_alloc_len(&tcp_nbufs, len, K_NO_WAIT);
-	}
-
-	NET_ASSERT(buf && buf->size >= len);
-
-	NET_DBG("len: %zu, buf->size: %hu", len, buf->size);
-
-	return buf;
-}
-
-#define tcp_nbuf_clone(_buf) net_buf_clone(_buf, K_NO_WAIT)
-#define tcp_nbuf_unref(_nbuf) net_buf_unref(_nbuf)
-#endif

@@ -66,10 +66,10 @@
 	status = "okay";
 };
 
-&i2s_in {
+&i2s_rx {
     status = "okay";
 };
 
-&i2s_out {
+&i2s_tx {
     status = "okay";
 };

@@ -49,7 +49,15 @@ bool z_x86_check_stack_bounds(uintptr_t addr, size_t size, u16_t cs)
 
 	if (arch_is_in_isr()) {
 		/* We were servicing an interrupt */
-		start = (uintptr_t)ARCH_THREAD_STACK_BUFFER(_interrupt_stack);
+		int cpu_id;
+
+#ifdef CONFIG_SMP
+		cpu_id = arch_curr_cpu()->id;
+#else
+		cpu_id = 0;
+#endif
+		start = (uintptr_t)Z_THREAD_STACK_BUFFER(
+		    z_interrupt_stacks[cpu_id]);
 		end = start + CONFIG_ISR_STACK_SIZE;
 	} else if ((cs & 0x3U) != 0U ||
 		   (_current->base.user_options & K_USER) == 0) {
@@ -57,7 +65,7 @@ bool z_x86_check_stack_bounds(uintptr_t addr, size_t size, u16_t cs)
 		 * The normal stack buffer is what we will check.
 		 */
 		start = _current->stack_info.start;
-		end = STACK_ROUND_DOWN(_current->stack_info.start +
+		end = Z_STACK_PTR_ALIGN(_current->stack_info.start +
 				       _current->stack_info.size);
 	} else {
 		/* User thread was doing a syscall, check kernel stack bounds */

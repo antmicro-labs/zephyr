@@ -1,7 +1,7 @@
-.. _device_drivers:
+.. _device_model_api:
 
 Device Driver Model
-###############################
+###################
 
 Introduction
 ************
@@ -44,7 +44,7 @@ are listed below.
   .. important::
 
     Use the :ref:`random API functions <random_api>` for random
-    values. :ref:`Entropy functions <entropy_interface>` should not be
+    values. :ref:`Entropy functions <entropy_api>` should not be
     directly used as a random number generator source as some hardware
     implementations are designed to be an entropy seed source for random
     number generators and will not provide cryptographically secure
@@ -205,19 +205,7 @@ A device-specific API definition typically looks like this:
 
    #include <drivers/subsystem.h>
 
-   typedef int (*specific_do_this_t)(struct device *device, int foo);
-
-   struct specific_api {
-     subsystem_driver_api subsystem_api;    /* this must be first */
-     specific_do_this_t do_this;
-   };
-
-   static inline int specific_do_this(struct device *device, int foo)
-   {
-     struct specific_api *api = (struct specific_api*)device->driver_api;
-
-     return api->do_this(device, foo);
-   }
+   int specific_do_this(struct device *device, int foo);
 
 A driver implementing extensions to the subsystem will define the real
 implementation of both the subsystem API and the specific APIs:
@@ -234,16 +222,8 @@ implementation of both the subsystem API and the specific APIs:
       ...
    }
 
-   static const struct specific_api driver_api = {
-     .subsystem_api = {
-       .do_whatever = generic_do_whatever,
-     },
-     .do_this = specific_do_this,
-   };
-
 Applications use the device through both the subsystem and specific
-APIs.  The subsystem APIs will directly access the subsystem part of the
-specific API structure.
+APIs.
 
 Single Driver, Multiple Instances
 *********************************
@@ -281,7 +261,7 @@ In the implementation of the common init function:
 
   int my_driver_init(struct device *device)
   {
-        const struct my_driver_config *config = device->config->config_info;
+        const struct my_driver_config *config = device->config_info;
 
         /* Do other initialization stuff */
         ...
@@ -376,7 +356,7 @@ to later get a device pointer by name. The same policies for initialization
 level and priority apply.
 
 For ``SYS_DEVICE_DEFINE()`` you can obtain pointers by name, see
-:ref:`power management <power_management>` section.
+:ref:`power management <power_management_api>` section.
 
 :c:func:`SYS_INIT()`
 

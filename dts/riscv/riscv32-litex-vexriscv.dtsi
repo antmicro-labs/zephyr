@@ -9,6 +9,12 @@
 	#size-cells = <1>;
 	compatible = "litex,vexriscv", "litex-dev";
 	model = "litex,vexriscv";
+
+
+	chosen {
+		zephyr,entropy = &prbs0;
+	};
+
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -64,11 +70,11 @@
 			label = "timer0";
 			status = "okay";
 		};
-		eth0: ethernet@82003000{
+		eth0: ethernet@82003800{
 			compatible = "litex,eth0";
 			interrupt-parent = <&intc0>;
 			interrupts = <2 0>;
-			reg = <0x82003000 0xb 0x82003800 0x6b >;
+			reg = <0x82003800 0xb 0x82004000 0x6b >;
 			local-mac-address = [10 e2 d5 00 00 02];
 			reg-names = "control", "buffers";
 			label = "eth0";
@@ -131,9 +137,9 @@
 			status = "disabled";
 			#pwm-cells = <2>;
 		};
-		i2s_in: i2s_in@82005000 {
+		i2s_rx: i2s_rx@82004800 {
 			compatible = "litex,i2s";
-			reg = <0x82005000 0x20 0xb1000000 0x40000>;
+			reg = <0x82004800 0x20 0xb1000000 0x40000>;
 			interrupt-parent = <&intc0>;
 			interrupts = <3 2>;
 			#address-cells = <1>;
@@ -143,9 +149,9 @@
 			label = "i2s_rx";
 			status = "disabled";
 		};
-		i2s_out: i2s_out@82005800 {
+		i2s_tx: i2s_tx@82005000 {
 			compatible = "litex,i2s";
-			reg = <0x82005800 0x20 0xb2000000 0x40000>;
+			reg = <0x82005000 0x20 0xb2000000 0x40000>;
 			interrupt-parent = <&intc0>;
 			interrupts = <4 2>;
 			#address-cells = <1>;

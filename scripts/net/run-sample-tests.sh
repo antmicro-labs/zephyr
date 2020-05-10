@@ -204,10 +204,15 @@ stop_zephyr ()
 
 wait_zephyr ()
 {
+    local result=""
+
     echo "Waiting for Zephyr $zephyr_pid..."
     wait $zephyr_pid
+    result=$?
 
     zephyr_pid=0
+
+    return $result
 }
 
 
@@ -308,6 +313,55 @@ docker_exec ()
 	    result=$?
 
 	    stop_zephyr
+	    ;;
+
+	mqtt_publisher)
+	    start_configuration || return $?
+	    start_docker "/usr/local/sbin/mosquitto -v
+			  -c /usr/local/etc/mosquitto/mosquitto.conf" || \
+			      return $?
+
+	    start_zephyr -DOVERLAY_CONFIG=overlay-sample.conf "$overlay"
+
+	    wait_zephyr
+	    result=$?
+
+	    if [ $result -ne 0 ]
+	    then
+		break
+	    fi
+
+	    # test TLS
+	    start_docker "/usr/local/sbin/mosquitto -v
+			  -c /usr/local/etc/mosquitto/mosquitto-tls.conf" || \
+			      return $?
+
+	    start_zephyr \
+		-DOVERLAY_CONFIG="overlay-tls.conf overlay-sample.conf" \
+		 "$overlay"
+
+	    wait_zephyr
+	    result=$?
+
+	    if [ $result -ne 0 ]
+	    then
+		break
+	    fi
+
+	    # TLS and SOCKS5, mosquitto TLS is already running
+	    start_docker "/usr/sbin/danted" || \
+		return $?
+
+	    start_zephyr \
+		-DOVERLAY_CONFIG="overlay-tls.conf overlay-sample.conf overlay-socks5.conf" \
+		 "$overlay" || return $?
+
+	    wait_zephyr
+	    result=$?
+
+	    stop_docker
+
+	    return $result
 	    ;;
 
 	*)

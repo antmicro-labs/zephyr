@@ -9,6 +9,8 @@
  *
  */
 
+#define DT_DRV_COMPAT st_stm32_rtc
+
 #include <time.h>
 
 #include <drivers/clock_control/stm32_clock_control.h>
@@ -31,7 +33,9 @@ LOG_MODULE_REGISTER(counter_rtc_stm32, CONFIG_COUNTER_LOG_LEVEL);
 	|| defined(CONFIG_SOC_SERIES_STM32F7X) \
 	|| defined(CONFIG_SOC_SERIES_STM32WBX) \
 	|| defined(CONFIG_SOC_SERIES_STM32G4X) \
-	|| defined(CONFIG_SOC_SERIES_STM32L1X)
+	|| defined(CONFIG_SOC_SERIES_STM32L0X) \
+	|| defined(CONFIG_SOC_SERIES_STM32L1X) \
+	|| defined(CONFIG_SOC_SERIES_STM32H7X)
 #define RTC_EXTI_LINE	LL_EXTI_LINE_17
 #endif
 
@@ -50,7 +54,7 @@ struct rtc_stm32_data {
 
 #define DEV_DATA(dev) ((struct rtc_stm32_data *)(dev)->driver_data)
 #define DEV_CFG(dev)	\
-((const struct rtc_stm32_config * const)(dev)->config->config_info)
+((const struct rtc_stm32_config * const)(dev)->config_info)
 
 
 static void rtc_stm32_irq_config(struct device *dev);
@@ -198,7 +202,7 @@ static u32_t rtc_stm32_get_pending_int(struct device *dev)
 
 static u32_t rtc_stm32_get_top_value(struct device *dev)
 {
-	const struct counter_config_info *info = dev->config->config_info;
+	const struct counter_config_info *info = dev->config_info;
 
 	return info->max_top_value;
 }
@@ -207,7 +211,7 @@ static u32_t rtc_stm32_get_top_value(struct device *dev)
 static int rtc_stm32_set_top_value(struct device *dev,
 				   const struct counter_top_cfg *cfg)
 {
-	const struct counter_config_info *info = dev->config->config_info;
+	const struct counter_config_info *info = dev->config_info;
 
 	if ((cfg->ticks != info->max_top_value) ||
 		!(cfg->flags & COUNTER_TOP_CFG_DONT_RESET)) {
@@ -222,7 +226,7 @@ static int rtc_stm32_set_top_value(struct device *dev,
 
 static u32_t rtc_stm32_get_max_relative_alarm(struct device *dev)
 {
-	const struct counter_config_info *info = dev->config->config_info;
+	const struct counter_config_info *info = dev->config_info;
 
 	return info->max_top_value;
 }
@@ -250,7 +254,11 @@ void rtc_stm32_isr(void *arg)
 		}
 	}
 
+#if defined(CONFIG_SOC_SERIES_STM32H7X) && defined(CONFIG_CPU_CORTEX_M4)
+	LL_C2_EXTI_ClearFlag_0_31(RTC_EXTI_LINE);
+#else
 	LL_EXTI_ClearFlag_0_31(RTC_EXTI_LINE);
+#endif
 }
 
 
@@ -329,7 +337,11 @@ static int rtc_stm32_init(struct device *dev)
 	LL_RTC_EnableWriteProtection(RTC);
 #endif /* RTC_CR_BYPSHAD */
 
+#if defined(CONFIG_SOC_SERIES_STM32H7X) && defined(CONFIG_CPU_CORTEX_M4)
+	LL_C2_EXTI_EnableIT_0_31(RTC_EXTI_LINE);
+#else
 	LL_EXTI_EnableIT_0_31(RTC_EXTI_LINE);
+#endif
 	LL_EXTI_EnableRisingTrig_0_31(RTC_EXTI_LINE);
 
 	rtc_stm32_irq_config(dev);
@@ -347,8 +359,8 @@ static const struct rtc_stm32_config rtc_config = {
 		.channels = 1,
 	},
 	.pclken = {
-		.enr = DT_RTC_0_CLOCK_BITS,
-		.bus = DT_RTC_0_CLOCK_BUS,
+		.enr = DT_INST_CLOCKS_CELL(0, bits),
+		.bus = DT_INST_CLOCKS_CELL(0, bus),
 	},
 	.ll_rtc_config = {
 		.HourFormat = LL_RTC_HOURFORMAT_24HOUR,
@@ -377,13 +389,14 @@ static const struct counter_driver_api rtc_stm32_driver_api = {
 		.get_max_relative_alarm = rtc_stm32_get_max_relative_alarm,
 };
 
-DEVICE_AND_API_INIT(rtc_stm32, DT_RTC_0_NAME, &rtc_stm32_init,
+DEVICE_AND_API_INIT(rtc_stm32, DT_INST_LABEL(0), &rtc_stm32_init,
 		    &rtc_data, &rtc_config, PRE_KERNEL_1,
 		    CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &rtc_stm32_driver_api);
 
 static void rtc_stm32_irq_config(struct device *dev)
 {
-	IRQ_CONNECT(DT_RTC_0_IRQ, DT_RTC_0_IRQ_PRI,
+	IRQ_CONNECT(DT_INST_IRQN(0),
+		    DT_INST_IRQ(0, priority),
 		    rtc_stm32_isr, DEVICE_GET(rtc_stm32), 0);
-	irq_enable(DT_RTC_0_IRQ);
+	irq_enable(DT_INST_IRQN(0));
 }

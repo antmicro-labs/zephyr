@@ -16,6 +16,10 @@ config I2S_LITEX_RX_BLOCK_COUNT
 	int "RX queue length"
 	default 500
 
+config I2S_LITEX_TX_BLOCK_COUNT
+	int "RX queue length"
+	default 500
+
 config I2S_LITEX_FIFO_WORD_SIZE
 	int "I2S fifo received sample size"
 	default 4

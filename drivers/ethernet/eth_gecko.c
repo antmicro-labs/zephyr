@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT silabs_gecko_ethernet
+
 /* Silicon Labs EFM32 Giant Gecko 11 Ethernet driver.
  * Limitations:
  * - no link monitoring through PHY interrupt
@@ -27,6 +29,7 @@ LOG_MODULE_REGISTER(eth_gecko, CONFIG_ETHERNET_LOG_LEVEL);
 #include "phy_gecko.h"
 #include "eth_gecko_priv.h"
 
+#include "eth.h"
 
 static u8_t dma_tx_buffer[ETH_TX_BUF_COUNT][ETH_TX_BUF_SIZE]
 __aligned(ETH_BUF_ALIGNMENT);
@@ -438,20 +441,20 @@ static void eth_init_pins(struct device *dev)
 	eth->ROUTELOC1 = 0;
 	eth->ROUTEPEN = 0;
 
-#if defined(DT_INST_0_SILABS_GECKO_ETHERNET_LOCATION_RMII)
+#if DT_INST_NODE_HAS_PROP(0, location_rmii)
 	for (idx = 0; idx < ARRAY_SIZE(cfg->pin_list->rmii); idx++)
 		soc_gpio_configure(&cfg->pin_list->rmii[idx]);
 
-	eth->ROUTELOC1 |= (DT_INST_0_SILABS_GECKO_ETHERNET_LOCATION_RMII <<
+	eth->ROUTELOC1 |= (DT_INST_PROP(0, location_rmii) <<
 			   _ETH_ROUTELOC1_RMIILOC_SHIFT);
 	eth->ROUTEPEN |= ETH_ROUTEPEN_RMIIPEN;
 #endif
 
-#if defined(DT_INST_0_SILABS_GECKO_ETHERNET_LOCATION_MDIO)
+#if DT_INST_NODE_HAS_PROP(0, location_mdio)
 	for (idx = 0; idx < ARRAY_SIZE(cfg->pin_list->mdio); idx++)
 		soc_gpio_configure(&cfg->pin_list->mdio[idx]);
 
-	eth->ROUTELOC1 |= (DT_INST_0_SILABS_GECKO_ETHERNET_LOCATION_MDIO <<
+	eth->ROUTELOC1 |= (DT_INST_PROP(0, location_mdio) <<
 			   _ETH_ROUTELOC1_MDIOLOC_SHIFT);
 	eth->ROUTEPEN |= ETH_ROUTEPEN_MDIOPEN;
 #endif
@@ -472,7 +475,7 @@ static int eth_init(struct device *dev)
 	/* Connect pins to peripheral */
 	eth_init_pins(dev);
 
-#if defined(DT_INST_0_SILABS_GECKO_ETHERNET_LOCATION_RMII)
+#if DT_INST_NODE_HAS_PROP(0, location_rmii)
 	/* Enable global clock and RMII operation */
 	eth->CTRL = ETH_CTRL_GBLCLKEN | ETH_CTRL_MIISEL_RMII;
 #endif
@@ -485,31 +488,10 @@ static int eth_init(struct device *dev)
 	return 0;
 }
 
-#if defined(CONFIG_ETH_GECKO_RANDOM_MAC)
-static void generate_random_mac(u8_t mac_addr[6])
-{
-	u32_t entropy;
-
-	entropy = sys_rand32_get();
-
-	/* SiLabs' OUI */
-	mac_addr[0] = SILABS_OUI_B0;
-	mac_addr[1] = SILABS_OUI_B1;
-	mac_addr[2] = SILABS_OUI_B2;
-
-	mac_addr[3] = entropy >> 0;
-	mac_addr[4] = entropy >> 8;
-	mac_addr[5] = entropy >> 16;
-
-	/* Set MAC address locally administered, unicast (LAA) */
-	mac_addr[0] |= 0x02;
-}
-#endif
-
 static void generate_mac(u8_t mac_addr[6])
 {
-#if defined(CONFIG_ETH_GECKO_RANDOM_MAC)
-	generate_random_mac(mac_addr);
+#if DT_INST_PROP(0, zephyr_random_mac_address)
+	gen_random_mac(mac_addr, SILABS_OUI_B0, SILABS_OUI_B1, SILABS_OUI_B2);
 #endif
 }
 
@@ -653,10 +635,10 @@ static struct device DEVICE_NAME_GET(eth_gecko);
 
 static void eth0_irq_config(void)
 {
-	IRQ_CONNECT(DT_INST_0_SILABS_GECKO_ETHERNET_IRQ_0,
-		    DT_INST_0_SILABS_GECKO_ETHERNET_IRQ_0_PRIORITY, eth_isr,
+	IRQ_CONNECT(DT_INST_IRQN(0),
+		    DT_INST_IRQ(0, priority), eth_isr,
 		    DEVICE_GET(eth_gecko), 0);
-	irq_enable(DT_INST_0_SILABS_GECKO_ETHERNET_IRQ_0);
+	irq_enable(DT_INST_IRQN(0));
 }
 
 static const struct eth_gecko_pin_list pins_eth0 = {
@@ -666,29 +648,22 @@ static const struct eth_gecko_pin_list pins_eth0 = {
 
 static const struct eth_gecko_dev_cfg eth0_config = {
 	.regs = (ETH_TypeDef *)
-		DT_INST_0_SILABS_GECKO_ETHERNET_BASE_ADDRESS,
+		DT_INST_REG_ADDR(0),
 	.pin_list = &pins_eth0,
 	.pin_list_size = ARRAY_SIZE(pins_eth0.mdio) +
 			 ARRAY_SIZE(pins_eth0.rmii),
 	.config_func = eth0_irq_config,
 	.phy = { (ETH_TypeDef *)
-		 DT_INST_0_SILABS_GECKO_ETHERNET_BASE_ADDRESS,
-		 DT_INST_0_SILABS_GECKO_ETHERNET_PHY_ADDRESS },
+		 DT_INST_REG_ADDR(0),
+		 DT_INST_PROP(0, phy_address) },
 };
 
 static struct eth_gecko_dev_data eth0_data = {
-#ifdef CONFIG_ETH_GECKO_MAC_MANUAL
-	.mac_addr = {
-		CONFIG_ETH_GECKO_MAC0,
-		CONFIG_ETH_GECKO_MAC1,
-		CONFIG_ETH_GECKO_MAC2,
-		CONFIG_ETH_GECKO_MAC3,
-		CONFIG_ETH_GECKO_MAC4,
-		CONFIG_ETH_GECKO_MAC5,
-	},
+#if NODE_HAS_VALID_MAC_ADDR(DT_DRV_INST(0))
+	.mac_addr = DT_INST_PROP(0, local_mac_address),
 #endif
 };
 
 ETH_NET_DEVICE_INIT(eth_gecko, CONFIG_ETH_GECKO_NAME, eth_init,
-		    &eth0_data, &eth0_config, CONFIG_ETH_INIT_PRIORITY,
-		    &eth_api, ETH_GECKO_MTU);
+		    device_pm_control_nop, &eth0_data, &eth0_config,
+		    CONFIG_ETH_INIT_PRIORITY, &eth_api, ETH_GECKO_MTU);

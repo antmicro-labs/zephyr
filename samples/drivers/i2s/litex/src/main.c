@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Antmicro
+ * Copyright (c) 2020 Antmicro <www.antmicro.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -7,7 +7,6 @@
 #include <zephyr.h>
 #include <sys/printk.h>
 #include <drivers/i2s.h>
-#include <drivers/uart.h>
 #include <stdlib.h>
 #include <logging/log.h>
 #define AUDIO_SAMPLE_FREQ (44100)
@@ -20,15 +19,14 @@
 
 #define AUDIO_FRAME_BUF_BYTES (AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_BYTES)
 
-#define I2S_PLAY_BUF_COUNT (2000)
+#define I2S_PLAY_BUF_COUNT (500)
 
 static struct device *host_i2s_rx_dev;
 static struct device *host_i2s_tx_dev;
-static struct device *uart_dev;
 static struct k_mem_slab i2s_rx_mem_slab;
 static struct k_mem_slab i2s_tx_mem_slab;
-static char audio_buffers[AUDIO_FRAME_BUF_BYTES * I2S_PLAY_BUF_COUNT];
-static char user_buffer[AUDIO_FRAME_BUF_BYTES * I2S_PLAY_BUF_COUNT];
+static char rx_buffers[AUDIO_FRAME_BUF_BYTES * I2S_PLAY_BUF_COUNT];
+static char tx_buffer[AUDIO_FRAME_BUF_BYTES * I2S_PLAY_BUF_COUNT];
 static struct i2s_config i2s_rx_cfg;
 static struct i2s_config i2s_tx_cfg;
 static int ret;
@@ -41,7 +39,7 @@ void init()
 		printk("unable to find i2s_rx device");
 		exit(-1);
 	}
-	k_mem_slab_init(&i2s_rx_mem_slab, audio_buffers, AUDIO_FRAME_BUF_BYTES,
+	k_mem_slab_init(&i2s_rx_mem_slab, rx_buffers, AUDIO_FRAME_BUF_BYTES,
 			I2S_PLAY_BUF_COUNT);
 
 	/* configure i2s for audio playback */
@@ -52,7 +50,7 @@ void init()
 	i2s_rx_cfg.frame_clk_freq = AUDIO_SAMPLE_FREQ;
 	i2s_rx_cfg.block_size = AUDIO_FRAME_BUF_BYTES;
 	i2s_rx_cfg.mem_slab = &i2s_rx_mem_slab;
-	i2s_rx_cfg.timeout = K_FOREVER;
+	i2s_rx_cfg.timeout = -1;
 	ret = i2s_configure(host_i2s_rx_dev, I2S_DIR_RX, &i2s_rx_cfg);
 
 	if (ret != 0) {
@@ -66,7 +64,7 @@ void init()
 		printk("unable to find i2s_tx device");
 		exit(-1);
 	}
-	k_mem_slab_init(&i2s_tx_mem_slab, audio_buffers, AUDIO_FRAME_BUF_BYTES,
+	k_mem_slab_init(&i2s_tx_mem_slab, tx_buffer, AUDIO_FRAME_BUF_BYTES,
 			I2S_PLAY_BUF_COUNT);
 
 	/* configure i2s for audio playback */
@@ -77,7 +75,7 @@ void init()
 	i2s_tx_cfg.frame_clk_freq = AUDIO_SAMPLE_FREQ;
 	i2s_tx_cfg.block_size = AUDIO_FRAME_BUF_BYTES;
 	i2s_tx_cfg.mem_slab = &i2s_tx_mem_slab;
-	i2s_tx_cfg.timeout = K_FOREVER;
+	i2s_tx_cfg.timeout = -1;
 	ret = i2s_configure(host_i2s_tx_dev, I2S_DIR_TX, &i2s_tx_cfg);
 	if (ret != 0) {
 		printk("i2s_configure failed with %d error", ret);
@@ -85,13 +83,12 @@ void init()
 	}
 }
 
-
 void main(void)
 {
-
 	k_sleep(K_SECONDS(5));
+
 	init();
-	
+
 	/* start i2s rx driver */
 	ret = i2s_trigger(host_i2s_rx_dev, I2S_DIR_RX, I2S_TRIGGER_START);
 	if (ret != 0) {
@@ -99,7 +96,7 @@ void main(void)
 		exit(-1);
 	}
 
-	/* start i2s rx driver */
+	/* start i2s tx driver */
 	ret = i2s_trigger(host_i2s_tx_dev, I2S_DIR_TX, I2S_TRIGGER_START);
 	if (ret != 0) {
 		printk("i2s_trigger failed with %d error", ret);
@@ -107,32 +104,13 @@ void main(void)
 	}
 
 	/* receive data */
-	void *mem_block;
-	size_t size, tot_size = 0;
-	while(true){
-		for (int i = 0; i < I2S_PLAY_BUF_COUNT; i++) {
-			ret = i2s_read(host_i2s_rx_dev, &mem_block, &size);
-			memcpy(user_buffer + tot_size, mem_block, size);
-			ret = i2s_write(host_i2s_tx_dev, user_buffer + tot_size, size);
-			tot_size += size;
-			k_mem_slab_free(&i2s_rx_mem_slab, &mem_block);
-		}
-		tot_size = 0;
-	}
-
-	// stop i2s transimsion
-	ret = i2s_trigger(host_i2s_tx_dev, I2S_DIR_TX, I2S_TRIGGER_STOP);
-	if (ret != 0) {
-		printk("i2s_trigger failed with %d error", ret);
-		exit(-1);
-	}
-
-	// stop i2s transimsion
-	ret = i2s_trigger(host_i2s_rx_dev, I2S_DIR_RX, I2S_TRIGGER_STOP);
-	if (ret != 0) {
-		printk("i2s_trigger failed with %d error", ret);
-		exit(-1);
+	void *rx_mem_block, *tx_mem_block;
+	size_t size;
+	while (true) {
+		k_mem_slab_alloc(&i2s_tx_mem_slab, &tx_mem_block, K_NO_WAIT);
+		i2s_read(host_i2s_rx_dev, &rx_mem_block, &size);
+		memcpy(tx_mem_block, rx_mem_block, size);
+		i2s_write(host_i2s_tx_dev, tx_mem_block, size);
+		k_mem_slab_free(&i2s_rx_mem_slab, &rx_mem_block);
 	}
 }
-
-
