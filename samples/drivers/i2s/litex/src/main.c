@@ -31,7 +31,7 @@ static struct i2s_config i2s_rx_cfg;
 static struct i2s_config i2s_tx_cfg;
 static int ret;
 
-void init()
+static void init()
 {
 	//configure rx device
 	host_i2s_rx_dev = device_get_binding("i2s_rx");
@@ -85,6 +85,9 @@ void init()
 
 void main(void)
 {
+	// we are not sure why, but i2s csr registers are cleared
+	// after around 5 seconds from zephyr start
+	// we delays the statr to prevent such situation
 	k_sleep(K_SECONDS(5));
 
 	init();
