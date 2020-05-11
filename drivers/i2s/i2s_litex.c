@@ -8,7 +8,7 @@
 #include <drivers/i2s.h>
 #include <soc.h>
 #include <sys/util.h>
-
+#include <assert.h>
 #include "i2s_litex.h"
 #include <logging/log.h>
 LOG_MODULE_REGISTER(i2s_litex);
@@ -71,15 +71,13 @@ static void i2s_reset_fifo(int reg)
  * @return N/A
  */
 
-static int i2s_irq_enable(int reg, int irq_type)
+static void i2s_irq_enable(int reg, int irq_type)
 {
-	if ((irq_type & (I2S_EV_READY | I2S_EV_ERROR)) == 0) {
-		return -EINVAL;
-	}
+	assert((irq_type & (I2S_EV_READY | I2S_EV_ERROR)) != 0);
+
 	u8_t reg_data = litex_read8(reg + I2S_EV_ENABLE_REG_OFFSET);
 
 	litex_write8(reg_data | irq_type, reg + I2S_EV_ENABLE_REG_OFFSET);
-	return 0;
 }
 
 /**
@@ -90,15 +88,13 @@ static int i2s_irq_enable(int reg, int irq_type)
  *
  * @return N/A
  */
-static int i2s_irq_disable(int reg, int irq_type)
+static void i2s_irq_disable(int reg, int irq_type)
 {
-	if ((irq_type & (I2S_EV_READY | I2S_EV_ERROR)) == 0) {
-		return -EINVAL;
-	}
+	assert((irq_type & (I2S_EV_READY | I2S_EV_ERROR)) != 0);
+
 	u8_t reg_data = litex_read8(reg + I2S_EV_ENABLE_REG_OFFSET);
 
 	litex_write8(reg_data & ~(irq_type), reg + I2S_EV_ENABLE_REG_OFFSET);
-	return 0;
 }
 
 /**
@@ -366,7 +362,6 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
 	const struct i2s_litex_cfg *const cfg = DEV_CFG(dev);
 	struct stream *stream;
-	int ret;
 	if (dir == I2S_DIR_RX) {
 		stream = &dev_data->rx;
 	} else if (dir == I2S_DIR_TX) {
@@ -393,11 +388,7 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 				       CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
 		}
 		i2s_enable(cfg->base);
-		ret = i2s_irq_enable(cfg->base, I2S_EV_READY);
-		if (ret < 0) {
-			LOG_ERR("invalid irq number");
-			return ret;
-		}
+		i2s_irq_enable(cfg->base, I2S_EV_READY);
 		stream->state = I2S_STATE_RUNNING;
 		break;
 
@@ -407,11 +398,7 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 			return -EIO;
 		}
 		i2s_disable(cfg->base);
-		ret = i2s_irq_disable(cfg->base, I2S_EV_READY);
-		if (ret < 0) {
-			LOG_ERR("invalid irq number");
-			return ret;
-		}
+		i2s_irq_disable(cfg->base, I2S_EV_READY);
 		stream->state = I2S_STATE_READY;
 		break;
 
