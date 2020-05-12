@@ -448,7 +448,7 @@ static void i2s_litex_isr_rx(void *arg)
 	k_sem_give(&stream->sem);
 }
 
-static inline void clear_tx_fifo(const struct i2s_litex_cfg *cfg)
+static inline void fill_tx_fifo(const struct i2s_litex_cfg *cfg)
 {
 	for (int i = 0; i < cfg->fifo_depth; i++) {
 		sys_write32(0x0, I2S_TX_FIFO_ADDR +
@@ -467,7 +467,7 @@ static void i2s_litex_isr_tx(void *arg)
 	ret = queue_get(&stream->mem_block_queue, &stream->mem_block,
 			&mem_block_size);
 	if (ret < 0) {
-		clear_tx_fifo(cfg);
+		fill_tx_fifo(cfg);
 		return;
 	}
 	k_sem_give(&stream->sem);
