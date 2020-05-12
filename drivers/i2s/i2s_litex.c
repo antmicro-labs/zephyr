@@ -285,7 +285,13 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 		LOG_ERR("unsupported I2S data format");
 		return -EINVAL;
 	}
+
 	if (channels_concatenated) {
+		if(i2s_cfg->word_size>16)
+		{
+			LOG_ERR("can't concatanate channels greater than 16 bit");
+			return -EINVAL;
+		}
 		// if channels are concatenated
 		// we can always copy 32 bits
 		i2s_cfg->word_size = 32;
