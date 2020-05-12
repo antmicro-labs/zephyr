@@ -74,7 +74,7 @@
 			compatible = "litex,eth0";
 			interrupt-parent = <&intc0>;
 			interrupts = <2 0>;
-			reg = <0x82003800 0xb 0x82004000 0x6b >;
+			reg = <0x82003800 0xb 0xb0000000 0x6b >;
 			local-mac-address = [10 e2 d5 00 00 02];
 			reg-names = "control", "buffers";
 			label = "eth0";

@@ -85,11 +85,6 @@ static void init()
 
 void main(void)
 {
-	// we are not sure why, but i2s csr registers are cleared
-	// after around 5 seconds from zephyr start.
-	// Some dalay has been introduced to avoid such a situation
-	k_sleep(K_SECONDS(5));
-
 	init();
 
 	/* start i2s rx driver */
