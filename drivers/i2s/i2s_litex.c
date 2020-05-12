@@ -73,7 +73,7 @@ static void i2s_reset_fifo(int reg)
 
 static void i2s_irq_enable(int reg, int irq_type)
 {
-	assert((irq_type & (I2S_EV_READY | I2S_EV_ERROR)) != 0);
+	assert(irq_type == I2S_EV_READY || irq_type == I2S_EV_ERROR);
 
 	u8_t reg_data = litex_read8(reg + I2S_EV_ENABLE_REG_OFFSET);
 
@@ -90,7 +90,7 @@ static void i2s_irq_enable(int reg, int irq_type)
  */
 static void i2s_irq_disable(int reg, int irq_type)
 {
-	assert((irq_type & (I2S_EV_READY | I2S_EV_ERROR)) != 0);
+	assert(irq_type == I2S_EV_READY || irq_type == I2S_EV_ERROR);
 
 	u8_t reg_data = litex_read8(reg + I2S_EV_ENABLE_REG_OFFSET);
 
@@ -440,6 +440,7 @@ static void i2s_litex_isr_rx(void *arg)
 	ret = queue_put(&stream->mem_block_queue, stream->mem_block,
 			stream->cfg.block_size);
 	if (ret < 0) {
+		LOG_WRN("data loss occured, no space left in ring buffer");
 		return;
 	}
 
@@ -485,15 +486,13 @@ static const struct i2s_driver_api i2s_litex_driver_api = {
 
 #define I2S_INIT(dir)                                                          \
                                                                                \
-	struct queue_item rx_ring_buf[CONFIG_I2S_LITEX_RX_BLOCK_COUNT];        \
-	struct queue_item tx_ring_buf[CONFIG_I2S_LITEX_TX_BLOCK_COUNT];        \
+	static struct queue_item rx_ring_buf[CONFIG_I2S_LITEX_RX_BLOCK_COUNT];        \
+	static struct queue_item tx_ring_buf[CONFIG_I2S_LITEX_TX_BLOCK_COUNT];        \
                                                                                \
 	static struct i2s_litex_data i2s_litex_data_##dir = {                  \
 		.dir.mem_block_queue.buf = dir##_ring_buf,                     \
 		.dir.mem_block_queue.len =                                     \
 			sizeof(dir##_ring_buf) / sizeof(struct queue_item),    \
-		.dir.mem_block_queue.head = 0,                                 \
-		.dir.mem_block_queue.tail = 0,                                 \
 	};                                                                     \
                                                                                \
 	static void i2s_litex_irq_config_func_##dir(struct device *dev);       \
