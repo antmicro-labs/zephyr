@@ -119,30 +119,19 @@ static void i2s_clear_pending_irq(int reg)
  * @param dst memory destination where fifo data will be copied to
  * @param size amount of data to be copied
  * @param sample_width width of signle sample in bits
- * @param channels_concatenated true if driver should expect samples without padding 
  *
  * @return N/A
  */
-static void i2s_copy_from_fifo(u8_t *dst, size_t size, int sample_width,
-			       bool channels_concatenated)
+static void i2s_copy_from_fifo(u8_t *dst, size_t size, int sample_width)
 {
 	u32_t data;
 	int chan_size = sample_width / 8;
 	int max_off = chan_size - 1;
-	if (channels_concatenated) {
-		for (size_t i = 0; i < size; i += 4) {
-			//using sys_read function, as fifo is not a csr, but a contignous memory space
-			*(dst + i) =
-				sys_read32(I2S_RX_FIFO_ADDR +
-					   i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
-		}
-	} else {
-		for (size_t i = 0; i < size; ++i) {
-			data = sys_read32(I2S_RX_FIFO_ADDR +
-					  i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
-			for (int off = max_off; off >= 0; off--) {
-				*(dst + i * chan_size + off) = data >> 8 * off;
-			}
+	for (size_t i = 0; i < size; ++i) {
+		data = sys_read32(I2S_RX_FIFO_ADDR +
+				  i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
+		for (int off = max_off; off >= 0; off--) {
+			*(dst + i * chan_size + off) = data >> 8 * off;
 		}
 	}
 }
@@ -155,36 +144,22 @@ static void i2s_copy_from_fifo(u8_t *dst, size_t size, int sample_width,
  * @param src memory from which data will be copied to fifo
  * @param size amount of data to be copied in bytes
  * @param sample_width width of signle sample in bits
- * @param channels_concatenated true if samples should be send without padding
  *
  * @return N/A
  */
-static void i2s_copy_to_fifo(u8_t *src, size_t size, int sample_width,
-			     bool channels_concatenated)
+static void i2s_copy_to_fifo(u8_t *src, size_t size, int sample_width)
 {
 	int chan_size = sample_width / 8;
 	int max_off = chan_size - 1;
 	u32_t data;
 	u8_t *d_ptr = (u8_t *)&data;
 
-	if (channels_concatenated) {
-		for (size_t i = 0; i < size; i += 4) {
-			//using sys_write function, as fifo is not a csr, but a contignous memory space
-			sys_write32(
-				*(src + i),
-				I2S_TX_FIFO_ADDR +
-					i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
+	for (size_t i = 0; i < size / chan_size; ++i) {
+		for (int off = max_off; off >= 0; off--) {
+			*(d_ptr + off) = *(src + i * chan_size + off);
 		}
-	} else {
-		for (size_t i = 0; i < size / chan_size; ++i) {
-			for (int off = max_off; off >= 0; off--) {
-				*(d_ptr + off) = *(src + i * chan_size + off);
-			}
-			sys_write32(
-				data,
-				I2S_TX_FIFO_ADDR +
-					i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
-		}
+		sys_write32(data, I2S_TX_FIFO_ADDR +
+					  i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
 	}
 }
 
@@ -255,17 +230,15 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
 	const struct i2s_litex_cfg *const cfg = DEV_CFG(dev);
 	struct stream *stream;
-
+	int channels_concatenated;
 	if (dir == I2S_DIR_RX) {
 		stream = &dev_data->rx;
-		stream->channels_concatenated =
-			litex_read8(I2S_RX_STATUS_REG) &
-			I2S_RX_STAT_CHANNEL_COPRESSED_MASK;
+		channels_concatenated = litex_read8(I2S_RX_STATUS_REG) &
+					I2S_RX_STAT_CHANNEL_CONCATENATED_MASK;
 	} else if (dir == I2S_DIR_TX) {
 		stream = &dev_data->tx;
-		stream->channels_concatenated =
-			litex_read8(I2S_TX_STATUS_REG) &
-			I2S_TX_STAT_CHANNEL_COPRESSED_MASK;
+		channels_concatenated = litex_read8(I2S_TX_STATUS_REG) &
+					I2S_TX_STAT_CHANNEL_CONCATENATED_MASK;
 	} else {
 		LOG_ERR("either RX or TX direction must be selected");
 		return -EINVAL;
@@ -311,6 +284,11 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 	if ((i2s_cfg->format & format_mask) == 0) {
 		LOG_ERR("unsupported I2S data format");
 		return -EINVAL;
+	}
+	if (channels_concatenated) {
+		// if channels are concatenated
+		// we can always copy 32 bits
+		i2s_cfg->word_size = 32;
 	}
 
 	memcpy(&stream->cfg, i2s_cfg, sizeof(struct i2s_config));
@@ -434,8 +412,7 @@ static void i2s_litex_isr_rx(void *arg)
 		return;
 	}
 	i2s_copy_from_fifo((u8_t *)stream->mem_block, cfg->fifo_depth,
-			   stream->cfg.word_size,
-			   stream->channels_concatenated);
+			   stream->cfg.word_size);
 	i2s_clear_pending_irq(cfg->base);
 
 	ret = queue_put(&stream->mem_block_queue, stream->mem_block,
@@ -472,7 +449,7 @@ static void i2s_litex_isr_tx(void *arg)
 	}
 	k_sem_give(&stream->sem);
 	i2s_copy_to_fifo((u8_t *)stream->mem_block, mem_block_size,
-			 stream->cfg.word_size, stream->channels_concatenated);
+			 stream->cfg.word_size);
 	i2s_clear_pending_irq(cfg->base);
 
 	k_mem_slab_free(stream->cfg.mem_slab, &stream->mem_block);

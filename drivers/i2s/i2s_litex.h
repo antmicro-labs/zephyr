@@ -35,9 +35,9 @@
 #define I2S_RX_CONTROL_REG (I2S_RX_BASE_ADDR + I2S_CONTROL_REG_OFFSET)
 #define I2S_RX_STATUS_REG (I2S_RX_BASE_ADDR + I2S_STATUS_REG_OFFSET)
 
-#define I2S_RX_STAT_CHANNEL_COPRESSED_OFFSET 31
-#define I2S_RX_STAT_CHANNEL_COPRESSED_MASK                                     \
-	(0x1 << I2S_RX_STAT_CHANNEL_COPRESSED_OFFSET)
+#define I2S_RX_STAT_CHANNEL_CONCATENATED_OFFSET 31
+#define I2S_RX_STAT_CHANNEL_CONCATENATED_MASK                                     \
+	(0x1 << I2S_RX_STAT_CHANNEL_CONCATENATED_OFFSET)
 
 #define I2S_RX_FIFO_ADDR DT_REG_ADDR_BY_NAME(DT_NODELABEL(i2s_rx), fifo)
 #define I2S_RX_FIFO_DEPTH DT_PROP(DT_NODELABEL(i2s_rx), fifo_depth)
@@ -50,9 +50,9 @@
 #define I2S_TX_CONTROL_REG (I2S_TX_BASE_ADDR + I2S_CONTROL_REG_OFFSET)
 #define I2S_TX_STATUS_REG (I2S_TX_BASE_ADDR + I2S_STATUS_REG_OFFSET)
 
-#define I2S_TX_STAT_CHANNEL_COPRESSED_OFFSET 24
-#define I2S_TX_STAT_CHANNEL_COPRESSED_MASK                                     \
-	(0x1 << I2S_TX_STAT_CHANNEL_COPRESSED_OFFSET)
+#define I2S_TX_STAT_CHANNEL_CONCATENATED_OFFSET 24
+#define I2S_TX_STAT_CHANNEL_CONCATENATED_MASK                                     \
+	(0x1 << I2S_TX_STAT_CHANNEL_CONCATENATED_OFFSET)
 
 #define I2S_TX_FIFO_ADDR DT_REG_ADDR_BY_NAME(DT_NODELABEL(i2s_tx), fifo)
 #define I2S_TX_FIFO_DEPTH DT_PROP(DT_NODELABEL(i2s_tx), fifo_depth)
@@ -76,7 +76,6 @@ struct stream {
 	struct i2s_config cfg;
 	struct ring_buf mem_block_queue;
 	void *mem_block;
-	bool channels_concatenated;
 };
 
 /* Device run time data */
