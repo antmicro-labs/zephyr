@@ -327,6 +327,7 @@ static int i2s_litex_read(struct device *dev, void **mem_block, size_t *size)
 		LOG_DBG("invalid state");
 		return -ENOMEM;
 	}
+	// just to implement tiemout
 	ret = k_sem_take(&dev_data->rx.sem,
 			 SYS_TIMEOUT_MS(dev_data->rx.cfg.timeout));
 	if (ret < 0) {
@@ -346,7 +347,7 @@ static int i2s_litex_write(struct device *dev, void *mem_block, size_t size)
 		LOG_DBG("invalid state");
 		return -EIO;
 	}
-
+	// just to implement tiemout
 	ret = k_sem_take(&dev_data->tx.sem,
 			 SYS_TIMEOUT_MS(dev_data->tx.cfg.timeout));
 	if (ret < 0) {
@@ -440,7 +441,7 @@ static void i2s_litex_isr_rx(void *arg)
 	ret = queue_put(&stream->mem_block_queue, stream->mem_block,
 			stream->cfg.block_size);
 	if (ret < 0) {
-		LOG_WRN("data loss occured, no space left in ring buffer");
+		LOG_WRN("Couldn't copy data from RX fifo to the ring buffer (no space left) - dropping a frame");
 		return;
 	}
 
@@ -486,8 +487,8 @@ static const struct i2s_driver_api i2s_litex_driver_api = {
 
 #define I2S_INIT(dir)                                                          \
                                                                                \
-	static struct queue_item rx_ring_buf[CONFIG_I2S_LITEX_RX_BLOCK_COUNT];        \
-	static struct queue_item tx_ring_buf[CONFIG_I2S_LITEX_TX_BLOCK_COUNT];        \
+	static struct queue_item rx_ring_buf[CONFIG_I2S_LITEX_RX_BLOCK_COUNT]; \
+	static struct queue_item tx_ring_buf[CONFIG_I2S_LITEX_TX_BLOCK_COUNT]; \
                                                                                \
 	static struct i2s_litex_data i2s_litex_data_##dir = {                  \
 		.dir.mem_block_queue.buf = dir##_ring_buf,                     \
