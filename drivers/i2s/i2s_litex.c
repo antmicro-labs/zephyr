@@ -19,6 +19,9 @@ LOG_MODULE_REGISTER(i2s_litex);
 	{                                                                      \
 		val = (++val < max) ? val : 0;                                 \
 	}
+#define WISHBONE_WIDTH 4
+static inline void clear_rx_fifo(const struct i2s_litex_cfg *cfg);
+static inline void fill_tx_fifo(const struct i2s_litex_cfg *cfg);
 
 /**
  * @brief Enable i2s device
@@ -124,16 +127,24 @@ static void i2s_clear_pending_irq(int reg)
  */
 static void i2s_copy_from_fifo(u8_t *dst, size_t size, int sample_width)
 {
+#if CONFIG_I2S_LITEX_CHANNELS_CONCATENATED
+	for (size_t i = 0; i < size; i += 4) {
+		//using sys_read function, as fifo is not a csr,
+		//but a contignous memory space
+		*(dst + i) = sys_read32(I2S_RX_FIFO_ADDR +
+					i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
+	}
+#else
 	u32_t data;
 	int chan_size = sample_width / 8;
 	int max_off = chan_size - 1;
 	for (size_t i = 0; i < size; ++i) {
-		data = sys_read32(I2S_RX_FIFO_ADDR +
-				  i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
+		data = sys_read32(I2S_RX_FIFO_ADDR + i * WISHBONE_WIDTH);
 		for (int off = max_off; off >= 0; off--) {
 			*(dst + i * chan_size + off) = data >> 8 * off;
 		}
 	}
+#endif
 }
 
 /**
@@ -154,13 +165,22 @@ static void i2s_copy_to_fifo(u8_t *src, size_t size, int sample_width)
 	u32_t data;
 	u8_t *d_ptr = (u8_t *)&data;
 
+#if CONFIG_I2S_LITEX_CHANNELS_CONCATENATED
+	for (size_t i = 0; i < size; i += 4) {
+		//using sys_write function, as fifo is not a csr,
+		//but a contignous memory space
+		sys_write32(*(src + i),
+			    I2S_TX_FIFO_ADDR +
+				    i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
+	}
+#else
 	for (size_t i = 0; i < size / chan_size; ++i) {
 		for (int off = max_off; off >= 0; off--) {
 			*(d_ptr + off) = *(src + i * chan_size + off);
 		}
-		sys_write32(data, I2S_TX_FIFO_ADDR +
-					  i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
+		sys_write32(data, I2S_TX_FIFO_ADDR + i * WISHBONE_WIDTH);
 	}
+#endif
 }
 
 /*
@@ -261,7 +281,6 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 		LOG_ERR("invalid channels number");
 		return -EINVAL;
 	}
-
 	int req_buf_s = cfg->fifo_depth * (i2s_cfg->word_size / 8);
 	if (i2s_cfg->block_size < req_buf_s) {
 		LOG_ERR("not enough space to allocate signle buffer");
@@ -286,16 +305,22 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 		return -EINVAL;
 	}
 
-	if (channels_concatenated) {
-		if(i2s_cfg->word_size>16)
-		{
-			LOG_ERR("can't concatanate channels greater than 16 bit");
-			return -EINVAL;
-		}
-		// if channels are concatenated
-		// we can always copy 32 bits
-		i2s_cfg->word_size = 32;
+#if CONFIG_I2S_LITEX_CHANNELS_CONCATENATED
+	if(channels_concatenated == 0)
+	{
+		LOG_ERR("invalid state. your device is configured to send channels with padding. please reconfigure driver");
+		return -EINVAL;
 	}
+
+	if (i2s_cfg->word_size > 16)
+	{
+		LOG_ERR("can't concatanate channels greater than 16 bit");
+		return -EINVAL;
+	}
+	// if channels are concatenated
+	// we can always copy 32 bits
+	i2s_cfg->word_size = 32;
+#endif
 
 	memcpy(&stream->cfg, i2s_cfg, sizeof(struct i2s_config));
 	stream->state = I2S_STATE_READY;
@@ -368,9 +393,7 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 		// when using tx module
 		// write some init data to fifo
 		if (dir == I2S_DIR_TX) {
-			memset(((void *)I2S_TX_FIFO_ADDR), 0xff,
-			       CONFIG_I2S_LITEX_FIFO_MAX_DEPTH *
-				       CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
+			fill_tx_fifo(cfg);
 		}
 		i2s_enable(cfg->base);
 		i2s_irq_enable(cfg->base, I2S_EV_READY);
@@ -397,8 +420,7 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 static inline void clear_rx_fifo(const struct i2s_litex_cfg *cfg)
 {
 	for (int i = 0; i < cfg->fifo_depth; i++) {
-		sys_read32(I2S_RX_FIFO_ADDR +
-			   i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
+		sys_read32(I2S_RX_FIFO_ADDR + i * WISHBONE_WIDTH);
 	}
 	i2s_clear_pending_irq(cfg->base);
 }
@@ -434,8 +456,7 @@ static void i2s_litex_isr_rx(void *arg)
 static inline void fill_tx_fifo(const struct i2s_litex_cfg *cfg)
 {
 	for (int i = 0; i < cfg->fifo_depth; i++) {
-		sys_write32(0x0, I2S_TX_FIFO_ADDR +
-					 i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
+		sys_write32(0x0, I2S_TX_FIFO_ADDR + i * WISHBONE_WIDTH);
 	}
 	i2s_clear_pending_irq(cfg->base);
 }

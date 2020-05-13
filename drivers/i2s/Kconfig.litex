@@ -20,11 +20,7 @@ config I2S_LITEX_TX_BLOCK_COUNT
 	int "RX queue length"
 	default 500
 
-config I2S_LITEX_FIFO_WORD_SIZE
-	int "I2S fifo received sample size"
-	default 4
-
-config I2S_LITEX_FIFO_MAX_DEPTH
-	int "I2S fifo max depth"
-	default 512
+config I2S_LITEX_CHANNELS_CONCATENATED
+	bool "Channels placed without padding in fifo"
+	default False
 endif
