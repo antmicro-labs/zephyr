@@ -16,7 +16,7 @@ f_count = 0
 s_count = 0
 frames_count = 1000
 data_width = 1
-samples_per_frame = 128*data_width
+samples_per_frame = 128 * data_width
 samples = []
 
 while f_count < frames_count:
@@ -27,12 +27,12 @@ while f_count < frames_count:
         data_1 = struct.unpack(">B",ser.read(1))[0]
         samples.append(data_1)
 
-        s_count += data_width
+        s_count += 1
 
     f_count+=1
     s_count = 0
     print(f"Already received {f_count}")
 
-with open("sin.raw", "wb") as f:
+with open("sound.raw", "wb") as f:
     f.write(bytearray(samples))
 
