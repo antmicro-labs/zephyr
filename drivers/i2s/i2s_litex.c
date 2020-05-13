@@ -125,23 +125,28 @@ static void i2s_clear_pending_irq(int reg)
  *
  * @return N/A
  */
-static void i2s_copy_from_fifo(u8_t *dst, size_t size, int sample_width)
+static void i2s_copy_from_fifo(u8_t *dst, size_t size, int sample_width, int channels)
 {
+	int chan_size = sample_width / 8;
 #if CONFIG_I2S_LITEX_CHANNELS_CONCATENATED
-	for (size_t i = 0; i < size; i += 4) {
+	for (size_t i = 0; i < size; i += chan_size) {
 		//using sys_read function, as fifo is not a csr,
 		//but a contignous memory space
-		*(dst + i) = sys_read32(I2S_RX_FIFO_ADDR +
-					i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
+		*(dst + i) = sys_read32(I2S_RX_FIFO_ADDR);
 	}
 #else
 	u32_t data;
-	int chan_size = sample_width / 8;
 	int max_off = chan_size - 1;
 	for (size_t i = 0; i < size; ++i) {
-		data = sys_read32(I2S_RX_FIFO_ADDR + i * WISHBONE_WIDTH);
+		data = sys_read32(I2S_RX_FIFO_ADDR);
 		for (int off = max_off; off >= 0; off--) {
 			*(dst + i * chan_size + off) = data >> 8 * off;
+		}
+		// if mono copy every left channel
+		// right channel is discarded
+		if(channels == 1)
+		{
+			sys_read32(I2S_RX_FIFO_ADDR);
 		}
 	}
 #endif
@@ -158,27 +163,32 @@ static void i2s_copy_from_fifo(u8_t *dst, size_t size, int sample_width)
  *
  * @return N/A
  */
-static void i2s_copy_to_fifo(u8_t *src, size_t size, int sample_width)
+static void i2s_copy_to_fifo(u8_t *src, size_t size, int sample_width,int channels)
 {
 	int chan_size = sample_width / 8;
-	int max_off = chan_size - 1;
-	u32_t data;
-	u8_t *d_ptr = (u8_t *)&data;
 
 #if CONFIG_I2S_LITEX_CHANNELS_CONCATENATED
-	for (size_t i = 0; i < size; i += 4) {
+	for (size_t i = 0; i < size; i += chan_size) {
 		//using sys_write function, as fifo is not a csr,
 		//but a contignous memory space
 		sys_write32(*(src + i),
-			    I2S_TX_FIFO_ADDR +
-				    i * CONFIG_I2S_LITEX_FIFO_WORD_SIZE);
+			    I2S_TX_FIFO_ADDR);
 	}
 #else
+	int max_off = chan_size - 1;
+	u32_t data;
+	u8_t *d_ptr = (u8_t *)&data;
 	for (size_t i = 0; i < size / chan_size; ++i) {
 		for (int off = max_off; off >= 0; off--) {
 			*(d_ptr + off) = *(src + i * chan_size + off);
 		}
-		sys_write32(data, I2S_TX_FIFO_ADDR + i * WISHBONE_WIDTH);
+		sys_write32(data, I2S_TX_FIFO_ADDR);
+		// if mono send every left channel
+		// right channel will be empty
+		if(channels == 1)
+		{
+			sys_write32(0x0, I2S_TX_FIFO_ADDR);
+		}
 	}
 #endif
 }
@@ -248,7 +258,7 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 			       struct i2s_config *i2s_cfg)
 {
 	struct i2s_litex_data *const dev_data = DEV_DATA(dev);
-	const struct i2s_litex_cfg *const cfg = DEV_CFG(dev);
+	struct i2s_litex_cfg *const cfg = DEV_CFG(dev);
 	struct stream *stream;
 	int channels_concatenated;
 	if (dir == I2S_DIR_RX) {
@@ -276,12 +286,17 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 		LOG_ERR("invalid operating mode");
 		return -EINVAL;
 	}
-
-	if (i2s_cfg->channels != 2) {
+	int channel_div;
+	if (i2s_cfg->channels == 1) {
+		channel_div = 2;
+	} else if (i2s_cfg->channels == 2) {
+		channel_div = 1;
+	} else {
 		LOG_ERR("invalid channels number");
 		return -EINVAL;
 	}
-	int req_buf_s = cfg->fifo_depth * (i2s_cfg->word_size / 8);
+	cfg->fifo_depth /= channel_div;
+	int req_buf_s = (cfg->fifo_depth * (i2s_cfg->word_size / 8));
 	if (i2s_cfg->block_size < req_buf_s) {
 		LOG_ERR("not enough space to allocate signle buffer");
 		LOG_ERR("fifo requires at least %i bytes", req_buf_s);
@@ -306,20 +321,15 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 	}
 
 #if CONFIG_I2S_LITEX_CHANNELS_CONCATENATED
-	if(channels_concatenated == 0)
-	{
+	if (channels_concatenated == 0) {
 		LOG_ERR("invalid state. your device is configured to send channels with padding. please reconfigure driver");
 		return -EINVAL;
 	}
 
-	if (i2s_cfg->word_size > 16)
-	{
+	if (i2s_cfg->word_size > 16) {
 		LOG_ERR("can't concatanate channels greater than 16 bit");
 		return -EINVAL;
 	}
-	// if channels are concatenated
-	// we can always copy 32 bits
-	i2s_cfg->word_size = 32;
 #endif
 
 	memcpy(&stream->cfg, i2s_cfg, sizeof(struct i2s_config));
@@ -419,8 +429,8 @@ static int i2s_litex_trigger(struct device *dev, enum i2s_dir dir,
 
 static inline void clear_rx_fifo(const struct i2s_litex_cfg *cfg)
 {
-	for (int i = 0; i < cfg->fifo_depth; i++) {
-		sys_read32(I2S_RX_FIFO_ADDR + i * WISHBONE_WIDTH);
+	for (int i = 0; i < I2S_RX_FIFO_DEPTH; i++) {
+		sys_read32(I2S_RX_FIFO_ADDR);
 	}
 	i2s_clear_pending_irq(cfg->base);
 }
@@ -440,7 +450,7 @@ static void i2s_litex_isr_rx(void *arg)
 		return;
 	}
 	i2s_copy_from_fifo((u8_t *)stream->mem_block, cfg->fifo_depth,
-			   stream->cfg.word_size);
+			   stream->cfg.word_size, stream->cfg.channels);
 	i2s_clear_pending_irq(cfg->base);
 
 	ret = queue_put(&stream->mem_block_queue, stream->mem_block,
@@ -455,8 +465,8 @@ static void i2s_litex_isr_rx(void *arg)
 
 static inline void fill_tx_fifo(const struct i2s_litex_cfg *cfg)
 {
-	for (int i = 0; i < cfg->fifo_depth; i++) {
-		sys_write32(0x0, I2S_TX_FIFO_ADDR + i * WISHBONE_WIDTH);
+	for (int i = 0; i < I2S_TX_FIFO_DEPTH; i++) {
+		sys_write32(0x0, I2S_TX_FIFO_ADDR);
 	}
 	i2s_clear_pending_irq(cfg->base);
 }
@@ -476,7 +486,7 @@ static void i2s_litex_isr_tx(void *arg)
 	}
 	k_sem_give(&stream->sem);
 	i2s_copy_to_fifo((u8_t *)stream->mem_block, mem_block_size,
-			 stream->cfg.word_size);
+			 stream->cfg.word_size, stream->cfg.channels);
 	i2s_clear_pending_irq(cfg->base);
 
 	k_mem_slab_free(stream->cfg.mem_slab, &stream->mem_block);
