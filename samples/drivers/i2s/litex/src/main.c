@@ -20,7 +20,7 @@
 
 #define AUDIO_FRAME_BUF_BYTES (AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_BYTES)
 
-#define I2S_PLAY_BUF_COUNT (500)
+#define I2S_PLAY_BUF_COUNT (1000)
 
 static struct device *host_i2s_dev;
 static struct device *uart_dev;
