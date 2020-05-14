@@ -22,7 +22,6 @@ LOG_MODULE_REGISTER(i2s_litex);
 #define WISHBONE_WIDTH 4
 static inline void clear_rx_fifo(const struct i2s_litex_cfg *cfg);
 static inline void fill_tx_fifo(const struct i2s_litex_cfg *cfg);
-
 /**
  * @brief Enable i2s device
  *
@@ -66,6 +65,55 @@ static void i2s_reset_fifo(int reg)
 }
 
 /**
+ * @brief Get i2s format handled by device 
+ *
+ * @param reg base register of device 
+ *
+ * @return currently supported format
+ */
+static int i2s_get_foramt(int reg)
+{
+	u8_t reg_data = litex_read32(reg +I2S_CONFIG_REG_OFFSET);
+	reg_data &= I2S_CONF_FORMAT_MASK;
+	if(reg_data == 1)
+	{
+		return I2S_FMT_DATA_FORMAT_I2S;
+	}else if(reg_data == 2)
+	{
+		return I2S_FMT_DATA_FORMAT_LEFT_JUSTIFIED;
+	}
+	return -EINVAL;
+}
+
+/**
+ * @brief Get i2s sample width handled by device
+ *
+ * @param reg base register of device 
+ *
+ * @return i2s sample width in bits
+ */
+static u32_t i2s_get_sample_width(int reg)
+{
+	u32_t reg_data = litex_read32(reg +I2S_CONFIG_REG_OFFSET);
+	reg_data &= I2S_CONF_SAMPLE_WIDTH_MASK;
+	return reg_data >> I2S_CONF_SAMPLE_WIDTH_OFFSET;
+}
+
+/**
+ * @brief Get i2s audio sampling rate handled by device
+ *
+ * @param reg base register of device 
+ *
+ * @return audio sampling rate in Hz
+ */
+static u32_t i2s_get_audio_freq(int reg)
+{
+	u32_t reg_data = litex_read32(reg +I2S_CONFIG_REG_OFFSET);
+	reg_data &= I2S_CONF_LRCK_MASK;
+	return reg_data >> I2S_CONF_LRCK_FREQ_OFFSET;
+}
+
+/**
  * @brief Enable i2s interrupt in event register
  *
  * @param reg base register of device
@@ -73,7 +121,6 @@ static void i2s_reset_fifo(int reg)
  *
  * @return N/A
  */
-
 static void i2s_irq_enable(int reg, int irq_type)
 {
 	assert(irq_type == I2S_EV_READY || irq_type == I2S_EV_ERROR);
@@ -122,6 +169,7 @@ static void i2s_clear_pending_irq(int reg)
  * @param dst memory destination where fifo data will be copied to
  * @param size amount of data to be copied
  * @param sample_width width of signle sample in bits
+ * @param channels number of received channels
  *
  * @return N/A
  */
@@ -169,6 +217,7 @@ static void i2s_copy_from_fifo(u8_t *dst, size_t size, int sample_width, int cha
  * @param src memory from which data will be copied to fifo
  * @param size amount of data to be copied in bytes
  * @param sample_width width of signle sample in bits
+ * @param channels number of received channels
  *
  * @return N/A
  */
@@ -304,6 +353,13 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 		LOG_ERR("invalid operating mode");
 		return -EINVAL;
 	}
+	int dev_audio_freq = i2s_get_audio_freq(cfg->base);
+	if(i2s_cfg->frame_clk_freq != dev_audio_freq)
+	{
+		LOG_ERR("invalid audio frequency sampling rate");
+		return -EINVAL;
+	}
+
 	int channel_div;
 	if (i2s_cfg->channels == 1) {
 		channel_div = 2;
@@ -324,16 +380,17 @@ static int i2s_litex_configure(struct device *dev, enum i2s_dir dir,
 			req_buf_s);
 		i2s_cfg->block_size = req_buf_s;
 	}
-	/* set I2S Data Format */
+
+	int dev_sample_width = i2s_get_sample_width(cfg->base);
 	if (i2s_cfg->word_size != 8U && i2s_cfg->word_size != 16U &&
-	    i2s_cfg->word_size != 24U && i2s_cfg->word_size != 32U) {
+	    i2s_cfg->word_size != 24U && i2s_cfg->word_size != 32U &&
+		i2s_cfg->word_size != dev_sample_width) {
 		LOG_ERR("invalid word size");
 		return -EINVAL;
 	}
-	uint8_t format_mask =
-		I2S_FMT_DATA_FORMAT_LEFT_JUSTIFIED | I2S_FMT_DATA_FORMAT_MASK;
-	/* set I2S Standard */
-	if ((i2s_cfg->format & format_mask) == 0) {
+
+	int dev_format = i2s_get_foramt(cfg->base);
+	if (dev_format != i2s_cfg->format) {
 		LOG_ERR("unsupported I2S data format");
 		return -EINVAL;
 	}
