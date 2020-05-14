@@ -187,7 +187,7 @@ static void i2s_copy_to_fifo(u8_t *src, size_t size, int sample_width,int channe
 		// right channel will be empty
 		if(channels == 1)
 		{
-			sys_write32(0x0, I2S_TX_FIFO_ADDR);
+			sys_write32(data, I2S_TX_FIFO_ADDR);
 		}
 	}
 #endif
