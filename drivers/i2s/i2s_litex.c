@@ -194,7 +194,11 @@ static void i2s_copy_from_fifo(u8_t *dst, size_t size, int sample_width,
 	for (size_t i = 0; i < size / chan_size; ++i) {
 		data = sys_read32(I2S_RX_FIFO_ADDR);
 		for (int off = max_off; off >= 0; off--) {
+#if CONFIG_I2S_LITEX_DATA_BIG_ENDIAN
+			*(dst + i * chan_size + (max_off - off)) = data >> 8 * off;
+#else
 			*(dst + i * chan_size + off) = data >> 8 * off;
+#endif
 		}
 		// if mono, copy every left channel
 		// right channel is discarded
@@ -240,7 +244,11 @@ static void i2s_copy_to_fifo(u8_t *src, size_t size, int sample_width,
 	u8_t *d_ptr = (u8_t *)&data;
 	for (size_t i = 0; i < size / chan_size; ++i) {
 		for (int off = max_off; off >= 0; off--) {
+#if CONFIG_I2S_LITEX_DATA_BIG_ENDIAN
+			*(d_ptr + off) = *(src + i * chan_size +(max_off - off));
+#else
 			*(d_ptr + off) = *(src + i * chan_size + off);
+#endif
 		}
 		sys_write32(data, I2S_TX_FIFO_ADDR);
 		// if mono send every left channel
